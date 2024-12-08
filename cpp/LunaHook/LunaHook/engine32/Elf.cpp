@@ -234,7 +234,7 @@ namespace
           auto text = arg->scenarioText;
           if (!Engine::isAddressReadable(text))
             return;
-          buffer->from_cs(text);
+          buffer->from(text);
           return;
           // data_ = q->dispatchTextASTD(text, role, sig);
           // scenarioArg_ = arg;
@@ -245,7 +245,7 @@ namespace
         {
           *role = Engine::NameRole;
           auto text = arg->nameText;
-          buffer->from_cs(text);
+          buffer->from(text);
           return;
           //  ::memcpy(text, newData.constData(), qMin(oldData.size(), newData.size()));
           // int left = oldData.size() - newData.size();
@@ -333,9 +333,9 @@ namespace
         HookParam hp;
         hp.address = addr;
         hp.text_fun = Private::hookBefore;
-        hp.hook_after = Private::hookafter1;
+        hp.embed_fun = Private::hookafter1;
         hp.type = USING_STRING | EMBED_ABLE | EMBED_DYNA_SJIS | NO_CONTEXT;
-        hp.hook_font = F_TextOutA;
+        hp.embed_hook_font = F_TextOutA;
         succ |= NewHook(hp, "EmbedElf");
         hp.address = addr + 5;
         hp.text_fun = Private::hookAfter;

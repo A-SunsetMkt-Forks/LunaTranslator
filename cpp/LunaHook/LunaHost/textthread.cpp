@@ -94,7 +94,7 @@ void TextThread::UpdateFlushTime(bool recursive)
 	lastPushTime = GetTickCount64();
 	if (!recursive)
 		return;
-	auto&& ths = syncThreads.Acquire().contents;
+	auto &&ths = syncThreads.Acquire().contents;
 	if (ths.find(this) == ths.end())
 		return;
 	for (auto t : ths)

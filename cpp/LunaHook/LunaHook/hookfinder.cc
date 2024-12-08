@@ -1,5 +1,6 @@
 
 #include "MinHook.h"
+#define DUMP_JIT_ADDR_MAP 0
 namespace
 {
 	SearchParam sp;
@@ -9,7 +10,6 @@ namespace
 	{
 		uint64_t address = 0;
 		uint64_t em_addr = 0;
-		int argidx = 0;
 		intptr_t padding = 0;
 		int offset = 0;
 		JITTYPE jittype;
@@ -95,7 +95,6 @@ namespace
 	constexpr int addr_offset = 50, send_offset = 60, original_offset = 126, registers = 16;
 #endif
 }
-
 bool IsBadReadPtr(void *data)
 {
 	if (data > records.get() && data < records.get() + sp.maxRecords)
@@ -132,15 +131,22 @@ void DoSend(int i, uintptr_t address, char *str, intptr_t padding, JITTYPE jitty
 	__try
 	{
 		int length = 0, sum = 0;
-		for (; (str[length] || str[length + 1]) && length < MAX_STRING_SIZE; length += 2)
+		for (; *(uint16_t *)(str + length) && length < MAX_STRING_SIZE; length += sizeof(uint16_t))
 			sum += *(uint16_t *)(str + length);
+#if DUMP_JIT_ADDR_MAP
+		if (((length > STRING) || (IsDBCSLeadByteEx(932, *str))) && length < MAX_STRING_SIZE - 1)
+#else
 		if (length > STRING && length < MAX_STRING_SIZE - 1)
+#endif
 		{
 			// many duplicate results with same address, offset, and third/fourth character will be found: filter them out
 			uint64_t signature = ((uint64_t)i << 56) | ((uint64_t)(str[2] + str[3]) << 48) | address;
+#if DUMP_JIT_ADDR_MAP
+#else
 			if (signatureCache[signature % CACHE_SIZE] == signature)
 				return;
 			signatureCache[signature % CACHE_SIZE] = signature;
+#endif
 			// if there are huge amount of strings that are the same, it's probably garbage: filter them out
 			// can't store all the strings, so use sum as heuristic instead
 			if (_InterlockedIncrement(sumCache + (sum % CACHE_SIZE)) > 25)
@@ -158,7 +164,7 @@ void DoSend(int i, uintptr_t address, char *str, intptr_t padding, JITTYPE jitty
 				else
 				{
 					records[n].em_addr = em_addr;
-					records[n].argidx = i;
+					records[n].offset = i;
 				}
 
 				for (int j = 0; j < length; ++j)
@@ -283,12 +289,12 @@ void SearchForHooks_Return()
 		hp.codepage = sp.codepage;
 		hp.jittype = records[i].jittype;
 		hp.padding = records[i].padding;
+		hp.offset = records[i].offset;
 
 		if (records[i].jittype == JITTYPE::PC)
 		{
 			if (!records[i].address)
 				continue;
-			hp.offset = records[i].offset;
 			hp.type = CODEC_UTF16 | USING_STRING;
 			hp.address = records[i].address;
 		}
@@ -298,7 +304,6 @@ void SearchForHooks_Return()
 				continue;
 			hp.emu_addr = records[i].em_addr;
 			hp.type = CODEC_UTF16 | USING_STRING | BREAK_POINT | NO_CONTEXT;
-			hp.argidx = records[i].argidx;
 		}
 		NotifyHookFound(hp, (wchar_t *)records[i].text);
 		if (++results % 100'000 == 0)
@@ -335,7 +340,7 @@ void SearchForHooks(SearchParam spUser)
 		initrecords();
 
 		std::vector<uintptr_t> addresses;
-		if( sp.jittype==JITTYPE::PC)
+		if( !sp.isjithook)
 		{
 			if (*sp.boundaryModule) {
 				auto [minaddr,maxaddr]=Util::QueryModuleLimits(GetModuleHandleW(sp.boundaryModule));
@@ -472,6 +477,13 @@ void SearchForHooks(SearchParam spUser)
 			}
 			ConsoleOutput("%p %p",minemaddr,maxemaddr);
 			ConsoleOutput("%p %p",sp.minAddress,sp.maxAddress);
+#if DUMP_JIT_ADDR_MAP
+				auto f=fopen("1.txt","a");
+				for(auto addr:jitaddr2emuaddr){
+					fprintf(f,"%llx => %llx\n", addr.second.second ,addr.first);
+				}
+				fclose(f);
+#endif
 			for(auto addr:jitaddr2emuaddr){
 				//ConsoleOutput("%llx => %p", addr.second.second ,addr.first);
 				if(addr.second.second>sp.maxAddress||addr.second.second<sp.minAddress)continue;

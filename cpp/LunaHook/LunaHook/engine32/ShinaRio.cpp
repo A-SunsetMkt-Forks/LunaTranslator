@@ -336,7 +336,7 @@ namespace
           //  if (::strlen(text) < NameCapacity
           //      && text[NameCapacity - 1] == 0 && text[NameCapacity])
           //    *role = Engine::NameRole;
-          b->from_cs(text);
+          b->from(text);
         }
         void dispatchText2(LPSTR text, bool paddingSpace, std::string newData)
         {
@@ -710,7 +710,7 @@ namespace
         auto arg = (HookArgument *)argaddr;
         if (Engine::isAddressReadable((argaddr + textOffset_)) == false)
         {
-          buffer->from_cs((LPSTR)s->stack[2]);
+          buffer->from((LPSTR)s->stack[2]);
           return;
         }
         LPSTR textAddress = (LPSTR) * (DWORD *)(argaddr + textOffset_),
@@ -974,10 +974,10 @@ namespace
       HookParam hp;
       hp.address = (ULONG)::GetTextExtentPoint32A;
       hp.text_fun = Private::hookBefore;
-      hp.hook_after = Private::hookafter;
+      hp.embed_fun = Private::hookafter;
       hp.type = EMBED_ABLE | EMBED_DYNA_SJIS | NO_CONTEXT;
-      hp.newlineseperator = L"_r";
-      hp.hook_font = F_GetGlyphOutlineA;
+      hp.lineSeparator = L"_r";
+      hp.embed_hook_font = F_GetGlyphOutlineA;
       hp.filter_fun = [](TextBuffer *buffer, HookParam *hp)
       {
         buffer->from(std::regex_replace(buffer->strA(), std::regex("_t!.*?[/>]"), ""));

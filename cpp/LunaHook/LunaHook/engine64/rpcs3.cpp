@@ -16,8 +16,6 @@ namespace
     }
     uintptr_t getDoJitAddress() {
         auto DoJitPtr=getDoJitAddress_();
-        
-        ConsoleOutput("DoJitPtr %p",DoJitPtr);
         if(!DoJitPtr)return 0;
         //<--DoJitPtr
         //0f85 1b050000 // jbe 0x00 ; long jump
@@ -158,7 +156,7 @@ namespace
     struct emfuncinfo
     {
         uint64_t type;
-        int argidx;
+        int offset;
         int padding;
         decltype(HookParam::text_fun) hookfunc;
         decltype(HookParam::filter_fun) filterfun;
@@ -194,7 +192,7 @@ namespace
         hpinternal.type = USING_STRING | NO_CONTEXT | BREAK_POINT | op.type;
         hpinternal.text_fun = op.hookfunc;
         hpinternal.filter_fun = op.filterfun;
-        hpinternal.argidx = op.argidx;
+        hpinternal.offset = op.offset;
         hpinternal.padding = op.padding;
         hpinternal.jittype = JITTYPE::RPCS3;
         NewHook(hpinternal, op._id);
@@ -242,7 +240,7 @@ bool rpcs3::attach_function()
     if (DoJitPtr == 0)
         return false;
     unsafeinithooks();
-    spDefault.jittype = JITTYPE::RPCS3;
+    spDefault.isjithook = true;
     spDefault.minAddress = 0;
     spDefault.maxAddress = -1;
     HookParam hp;
@@ -265,8 +263,7 @@ namespace
     void FBLJM61131(TextBuffer *buffer, HookParam *hp)
     {
         auto s = buffer->strA();
-        std::regex pattern("\\[[^\\]]+.");
-        s = std::regex_replace(s, pattern, "");
+        s = std::regex_replace(s, std::regex("\\[[^\\]]+."), "");
         s = std::regex_replace(s, std::regex("\\\\k|\\\\x|%C|%B"), "");
         s = std::regex_replace(s, std::regex("\\%\\d+\\#[0-9a-fA-F]*\\;"), "");
         s = std::regex_replace(s, std::regex("\\n+"), " ");
@@ -275,7 +272,7 @@ namespace
     auto _ = []()
     {
         emfunctionhooks = {
-            //'&' -Sora no Mukou de Sakimasu you ni-
+            // ‘＆’ - 空の向こうで咲きますように -
             {0x46328, {CODEC_UTF8, 1, 0, 0, FBLJM61131, "BLJM61131"}},
             // Dunamis15
             {0x42c90, {CODEC_UTF8, 1, 0, 0, FBLJM61131, "BLJM60347"}},

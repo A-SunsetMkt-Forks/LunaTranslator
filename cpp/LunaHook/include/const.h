@@ -1,7 +1,5 @@
 #pragma once
 
-#define LUNA_VERSION {VERSION_MAJOR,VERSION_MINOR,VERSION_PATCH,VERSION_REVISION}
-
 enum
 {
   STRING = 12,
@@ -38,7 +36,12 @@ enum HostNotificationType
   HOST_NOTIFICATION_RMVHOOK,
   HOST_NOTIFICATION_INSERTING_HOOK,
   HOST_SETTEXTTHREADTYPE,
-  HOST_NOTIFICATION_WARNING
+};
+enum class HOSTINFO
+{
+  Console,
+  Warning,
+  EmuGameName
 };
 #define NEXT_MASK(x)            \
   DUMMY1_##x,                   \

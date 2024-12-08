@@ -5,7 +5,7 @@ namespace { // unnamed
 
 void SpecialHookRetouch1(hook_stack *stack, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
 { 
-  buffer->from_cs((char*)stack->stack[1]);
+  buffer->from((char*)stack->stack[1]);
   *split =
     stack->eax == 0 ? FIXED_SPLIT_VALUE * 2 : // name
     stack->ebx == 0 ? FIXED_SPLIT_VALUE * 1 : // scenario
@@ -31,7 +31,7 @@ bool InsertRetouch1Hook()
   hp.address = addr;
   hp.offset=get_stack(1);
   hp.type = USING_STRING|NO_CONTEXT|EMBED_ABLE|EMBED_AFTER_NEW|EMBED_DYNA_SJIS;
-  hp.hook_font=F_GetGlyphOutlineA;
+  hp.embed_hook_font=F_GetGlyphOutlineA;
   hp.text_fun = SpecialHookRetouch1;
   ConsoleOutput("INSERT Retouch");
   return NewHook(hp, "Retouch");
@@ -56,7 +56,7 @@ bool InsertRetouch2Hook()
   hp.address = addr;
   hp.offset=get_stack(1);
   hp.type = USING_STRING|NO_CONTEXT|EMBED_ABLE|EMBED_AFTER_NEW|EMBED_DYNA_SJIS;
-  hp.hook_font=F_GetGlyphOutlineA;
+  hp.embed_hook_font=F_GetGlyphOutlineA;
   ConsoleOutput("INSERT Retouch");
   return NewHook(hp, "Retouch");
 }
@@ -87,7 +87,7 @@ bool attach() // attach scenario
   hp.address = addr;
   hp.offset=get_stack(1); 
   hp.type = USING_STRING|NO_CONTEXT|EMBED_ABLE|EMBED_AFTER_NEW|EMBED_DYNA_SJIS;
-  hp.hook_font=F_GetGlyphOutlineA;
+  hp.embed_hook_font=F_GetGlyphOutlineA;
   return NewHook(hp, "RetouchHistory");
 }
 

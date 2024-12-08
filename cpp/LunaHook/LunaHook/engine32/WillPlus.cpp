@@ -147,7 +147,7 @@ namespace
       // Still extract the first text
       // hp->type ^= EXTERN_HOOK;
       char *str = *(char **)(stack->base + hp->offset);
-      buffer->from_cs(str);
+      buffer->from(str);
       *split = 0; // 8/3/2014 jichi: use return address as split
     }
     else
@@ -601,8 +601,8 @@ bool InsertWillPlus4Hook()
   // hp.filter_fun = WillPlus_extra_filter;
   hp.type = USING_STRING | CODEC_UTF16 | EMBED_ABLE;
   hp.text_fun = will3::hookBefore;
-  hp.newlineseperator = L"\\n";
-  hp.hook_after = will3::hookafter;
+  hp.lineSeparator = L"\\n";
+  hp.embed_fun = will3::hookafter;
   return NewHook(hp, "EmbedWillplus3");
 }
 bool InsertWillPlus5Hook()
@@ -860,9 +860,9 @@ namespace
       savetyperef[_type] = _tinfo;
       hp.text_fun = hookBefore<_type>;
       hp.type = EMBED_ABLE | CODEC_UTF16 | NO_CONTEXT;
-      hp.newlineseperator = L"\\n";
-      hp.hook_after = hookafter<_type>;
-      hp.hook_font = F_MultiByteToWideChar | F_GetGlyphOutlineW;
+      hp.lineSeparator = L"\\n";
+      hp.embed_fun = hookafter<_type>;
+      hp.embed_hook_font = F_MultiByteToWideChar | F_GetGlyphOutlineW;
       char _[] = "EmbedWillplusW0";
       _[sizeof(_) - 2] += _type;
       return NewHook(hp, _);
@@ -1571,15 +1571,15 @@ namespace
 
       hp.text_fun = Private::hookBefore;
       hp.type = EMBED_ABLE | NO_CONTEXT;
-      hp.newlineseperator = L"\\n";
-      hp.hook_after = Private::hookafter;
-      hp.hook_font = F_GetGlyphOutlineA | F_TextOutA;
+      hp.lineSeparator = L"\\n";
+      hp.embed_fun = Private::hookafter;
+      hp.embed_hook_font = F_GetGlyphOutlineA | F_TextOutA;
       static ULONG paddr = (PatchA::patchEncoding(startAddress, stopAddress));
       ConsoleOutput("%p", paddr);
       if (paddr)
       {
         hp.type |= EMBED_DYNA_SJIS;
-        hp.hook_font = F_GetGlyphOutlineA | F_TextOutA;
+        hp.embed_hook_font = F_GetGlyphOutlineA | F_TextOutA;
         patch_fun = []()
         {
           PatchA::replace_near_call(paddr + 5, (ULONG)PatchA::Private::isLeadByteChar);
@@ -1605,7 +1605,7 @@ namespace
         if (!Engine::isAddressReadable(text) || !*text || ::strlen(text) <= 2) // do not translate single character
           return;
         *role = Engine::OtherRole;
-        buffer->from_cs(text);
+        buffer->from(text);
       }
 
     } // namespace Private

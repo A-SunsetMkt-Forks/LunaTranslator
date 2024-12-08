@@ -262,7 +262,7 @@ namespace
         return;
 
       *role = Engine::OtherRole;
-      buffer->from_cs(text);
+      buffer->from(text);
     }
     void afterAgsSpriteCreateTextExW(hook_stack *s, TextBuffer buffer)
     {
@@ -298,7 +298,7 @@ namespace
           *role = Engine::ScenarioRole;
           break;
         }
-      buffer->from_cs(text);
+      buffer->from(text);
     }
     void afterAgsSpriteCreateTextW(hook_stack *s, TextBuffer buffer)
     {
@@ -341,7 +341,7 @@ namespace
           *role = Engine::ScenarioRole;
           break;
         }
-      buffer->from_cs(text);
+      buffer->from(text);
     }
   }
   // jichi 7/26/2015: Backport logic in vnragent to vnrhook
@@ -762,7 +762,7 @@ namespace
     {
       hp.type |= CODEC_UTF16;
       hp.text_fun = beforeAgsSpriteCreateTextW;
-      hp.hook_after = afterAgsSpriteCreateTextW;
+      hp.embed_fun = afterAgsSpriteCreateTextW;
       succ |= NewHook(hp, "SystemAoiW");
 
       ULONG addr = findAoiProc(hModule, "AgsSpriteCreateTextEx", 1);
@@ -773,7 +773,7 @@ namespace
         hp.offset = get_stack(2);
         hp.type = CODEC_UTF16 | EMBED_ABLE; //|EMBED_AFTER_OVERWRITE;
         hp.text_fun = beforeAgsSpriteCreateTextExW;
-        hp.hook_after = afterAgsSpriteCreateTextExW;
+        hp.embed_fun = afterAgsSpriteCreateTextExW;
         succ |= NewHook(hp, "SystemAoiExW");
       }
 
@@ -782,8 +782,8 @@ namespace
     else
     {
       hp.text_fun = beforeAgsSpriteCreateTextA;
-      hp.hook_after = afterAgsSpriteCreateTextA;
-      hp.hook_font = F_DrawTextExA;
+      hp.embed_fun = afterAgsSpriteCreateTextA;
+      hp.embed_hook_font = F_DrawTextExA;
       if (AgsPatchA::attach(processStartAddress, processStopAddress) == false)
         hp.type |= EMBED_DYNA_SJIS;
       succ |= NewHook(hp, "SystemAoiA");

@@ -9,7 +9,7 @@
 ### [使用说明](https://docs.lunatranslator.org/#/zh/) [视频教程](https://space.bilibili.com/592120404/video) <a href="https://qm.qq.com/q/I5rr3uEpi2"><img src="https://img.shields.io/badge/QQ群-963119821-FF007C"></a> <a href="https://discord.com/invite/ErtDwVeAbB"><img src="https://img.shields.io/discord/1262692128031772733?label=Discord&logo=discord&color=FF007C"></a>
 
  
-### 简体中文  | [English](docs/other/README_en.md) | [Русский язык](docs/other/README_ru.md) | [Other Language](docs/other/otherlang.md) 
+### 简体中文  | [English](docs/other/README_en.md) | [Other Language](docs/other/otherlang.md) 
 
 > **一款galgame翻译器**
 
@@ -35,8 +35,6 @@
 - **注册在线翻译** 支持使用用户注册的 **传统翻译** ( 百度、腾讯、有道、小牛、彩云、火山、DeepL、yandex、google、ibm、Azure ) 和 **大模型翻译** ( ChatGPT兼容接口、claude、cohere、gemini、百度千帆、腾讯混元 ) 
 
 - **离线翻译** 支持 **传统翻译** ( J北京7、金山快译、译典通、ezTrans、Sugoi、MT5 ) 和离线部署的 **大模型翻译** ( ChatGPT兼容接口、Sakura大模型 ) 
-
-- **Chrome调试翻译** 支持 **传统翻译** ( deepl、yandex、有道、百度、腾讯、必应、彩云、小牛、阿里、谷歌 ) 和 **大模型翻译** ( chatgpt、deepseek、moonshot、qianwen、chatglm、Theb.ai、DuckDuckGo ) 
 
 - **预翻译** 支持读取预翻译文件，支持翻译缓存
 

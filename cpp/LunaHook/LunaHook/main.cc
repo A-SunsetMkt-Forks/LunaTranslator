@@ -37,8 +37,7 @@ DWORD WINAPI Pipe(LPVOID)
 
 		*(DWORD *)buffer = GetCurrentProcessId();
 		WriteFile(hookPipe, buffer, sizeof(DWORD), &count, nullptr);
-		WORD hookversion[4] = LUNA_VERSION;
-		WriteFile(hookPipe, hookversion, sizeof(hookversion), &count, nullptr);
+		WriteFile(hookPipe, LUNA_VERSION, sizeof(LUNA_VERSION), &count, nullptr);
 
 		ConsoleOutput(PIPE_CONNECTED);
 		HIJACK();
@@ -106,21 +105,12 @@ void TextOutput(const ThreadParam &tp, const HookParam &hp, TextOutput_T *buffer
 	memcpy(&buffer->hp, &hp, sizeof(hp));
 	WriteFile(hookPipe, buffer, sizeof(TextOutput_T) + len, DUMMY, nullptr);
 }
-
-void ConsoleOutput(LPCSTR text, ...)
+void HostInfo(HOSTINFO type, LPCSTR text, ...)
 {
-	ConsoleOutputNotif buffer;
+	HostInfoNotif buffer;
 	va_list args;
 	va_start(args, text);
-	vsnprintf(buffer.message, MESSAGE_SIZE, text, args);
-	WriteFile(hookPipe, &buffer, sizeof(buffer), DUMMY, nullptr);
-}
-
-void WarningOutput(LPCSTR text, ...)
-{
-	WarningNotif buffer;
-	va_list args;
-	va_start(args, text);
+	buffer.type = type;
 	vsnprintf(buffer.message, MESSAGE_SIZE, text, args);
 	WriteFile(hookPipe, &buffer, sizeof(buffer), DUMMY, nullptr);
 }
@@ -223,6 +213,12 @@ int HookStrLen(HookParam *hp, BYTE *data)
 		return strnlen((char *)data, TEXT_BUFFER_SIZE);
 }
 static std::mutex maplock;
+void jitaddrclear()
+{
+	std::lock_guard _(maplock);
+	emuaddr2jitaddr.clear();
+	jitaddr2emuaddr.clear();
+}
 void jitaddraddr(uint64_t em_addr, uintptr_t jitaddr, JITTYPE jittype)
 {
 	std::lock_guard _(maplock);
@@ -262,10 +258,11 @@ void delayinsertadd(HookParam hp, std::string name)
 }
 void delayinsertNewHook(uint64_t em_address)
 {
-	if (delayinserthook->find(em_address) == delayinserthook->end())
+	auto &&_delayinserthook = delayinserthook.Acquire();
+	if (_delayinserthook->find(em_address) == _delayinserthook->end())
 		return;
-	auto h = delayinserthook->at(em_address);
-	delayinserthook->erase(em_address);
+	auto h = _delayinserthook->at(em_address);
+	_delayinserthook->erase(em_address);
 	NewHook(h.second, h.first.c_str());
 }
 bool NewHook(HookParam hp, LPCSTR name)

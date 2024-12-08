@@ -576,7 +576,7 @@ namespace
           // 004B521B   33ED             XOR EBP,EBP
           *role = s->stack[5] == 0 ? Engine::NameRole : Engine::ScenarioRole;
         }
-        buffer->from_cs(text);
+        buffer->from(text);
       }
 
       void hookAfterCaller(hook_stack *s, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
@@ -777,7 +777,7 @@ namespace
     hp.address = addr;
     hp.offset = get_stack(3);
     hp.type = CODEC_UTF16 | USING_STRING | EMBED_ABLE | EMBED_AFTER_NEW;
-    hp.hook_font = F_GetGlyphOutlineW;
+    hp.embed_hook_font = F_GetGlyphOutlineW;
     return NewHook(hp, "Cotopha5");
   }
 }

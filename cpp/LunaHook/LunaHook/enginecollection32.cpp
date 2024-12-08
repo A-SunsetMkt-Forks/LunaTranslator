@@ -18,11 +18,13 @@
 #include "engine32/FrontWing.h"
 #include "engine32/GSX.h"
 #include "engine32/VALKYRIA.h"
+#include "engine32/Moonstone.h"
 #include "engine32/mirage.h"
 #include "engine32/Sprite.h"
 #include "engine32/PONScripter.h"
 #include "engine32/Stronger.h"
 #include "engine32/Fizz.h"
+#include "engine32/Aromarie.h"
 #include "engine32/Ruf.h"
 #include "engine32/SYSD.h"
 #include "engine32/Diskdream.h"
@@ -107,11 +109,12 @@
 #include "engine32/XUSE.h"
 #include "engine32/RPGMaker.h"
 #include "engine32/EME.h"
+#include "engine32/T2U.h"
 #include "engine32/RRE.h"
 #include "engine32/Sceplay.h"
 #include "engine32/Onscripter.h"
 #include "engine32/Candy.h"
-#include "engine32/AIL2.h"
+#include "engine32/AIL.h"
 #include "engine32/ApricoT.h"
 #include "engine32/Triangle.h"
 #include "engine32/GASTRO.h"
@@ -213,6 +216,7 @@ std::vector<ENGINE *> check_engines()
         new Wolf,
         new Circus1,
         new Circus2,
+        new Circus_old,
         new Cotopha,
         new Artemis,
         new CatSystem,
@@ -249,7 +253,7 @@ std::vector<ENGINE *> check_engines()
         new RRE,
         new Candy,
         new WillowSoft,
-        new AIL2,
+        new AIL,
         new ApricoT,
         new Triangle2,
         new Triangle,
@@ -412,5 +416,7 @@ std::vector<ENGINE *> check_engines()
         new AGE_System,
         new Cage,
         new Winters,
-    };
+        new Aromarie,
+        new Moonstone,
+        new T2U};
 }

@@ -260,10 +260,11 @@ LunaHost::LunaHost()
         std::bind(&LunaHost::on_thread_create, this, std::placeholders::_1),
         std::bind(&LunaHost::on_thread_delete, this, std::placeholders::_1),
         std::bind(&LunaHost::on_text_recv, this, std::placeholders::_1, std::placeholders::_2),
+        true,
+        [=](HOSTINFO type, const std::wstring &output)
+        { on_info(type, output); },
         {},
-        {},
-        {},
-        std::bind(&LunaHost::on_warning, this, std::placeholders::_1));
+        {});
 
     mainlayout = new gridlayout();
     mainlayout->addcontrol(g_selectprocessbutton, 0, 0);
@@ -310,10 +311,9 @@ LunaHost::LunaHost()
         } })
         .detach();
 
-    WORD version[4] = LUNA_VERSION;
     WCHAR vs[32];
 
-    wsprintf(vs, L" | %s v%d.%d.%d", VersionCurrent, version[0], version[1], version[2]);
+    wsprintf(vs, L" | %s v%d.%d.%d", VersionCurrent, LUNA_VERSION[0], LUNA_VERSION[1], LUNA_VERSION[2]);
     title += vs;
     settext(title);
     std::thread([&]()
@@ -412,9 +412,14 @@ bool LunaHost::on_text_recv(TextThread &thread, std::wstring &output)
     }
     return true;
 }
-void LunaHost::on_warning(const std::wstring &warning)
+void LunaHost::on_info(HOSTINFO type, const std::wstring &warning)
 {
-    MessageBoxW(winId, warning.c_str(), L"warning", 0);
+    switch (type)
+    {
+    case HOSTINFO::Warning:
+        MessageBoxW(winId, warning.c_str(), L"warning", 0);
+        break;
+    }
 }
 void LunaHost::on_thread_create(TextThread &thread)
 {

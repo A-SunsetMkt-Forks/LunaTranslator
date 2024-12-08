@@ -359,7 +359,7 @@ def splittranslatortypes():
     pre, offline, free, dev, api = [], [], [], [], []
     for k in globalconfig["fanyi"]:
         try:
-            {"pre": pre, "offline": offline, "free": free, "dev": dev, "api": api}[
+            {"pre": pre, "offline": offline, "free": free, "api": api}[
                 globalconfig["fanyi"][k].get("type", "free")
             ].append(k)
         except:
@@ -920,6 +920,18 @@ def createurl(url: str):
     return url
 
 
+def create_langmap(langmap):
+    _ = dict(
+        zip(
+            [_["code"] for _ in static_data["lang_list_all"]],
+            [_["code"] for _ in static_data["lang_list_all"]],
+        )
+    )
+    _.update({"cht": "zh", "auto": "auto"})
+    _.update(langmap)
+    return _
+
+
 def createenglishlangmap():
     mp = dict(
         zip(
@@ -1029,7 +1041,6 @@ def getannotatedapiname(x):
         + {
             "free": "在线翻译",
             "api": "注册在线翻译",
-            "dev": "调试浏览器",
             "pre": "预翻译",
             "offline": "离线翻译",
         }.get(tp, "unknown type")
@@ -1057,7 +1068,8 @@ def is_ascii_symbo(c: str):
 
 
 def is_ascii_control(c: str):
-    return cinranges(c, (0, 0x1F), (0x7F, 0xA0))
+    # 不要管\r\n
+    return cinranges(c, (0, 0x9), (0xB, 0xC), (0xE, 0x1F), (0x7F, 0xA0))
 
 
 def checkchaos(text):

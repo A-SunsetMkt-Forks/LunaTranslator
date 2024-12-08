@@ -113,9 +113,9 @@ struct HookParam
 	ALIGNPTR(uint64_t __12, uintptr_t user_value);
 	ALIGNPTR(uint64_t __2, void (*text_fun)(hook_stack *stack, HookParam *hp, TextBuffer *buffer, uintptr_t *split))
 	ALIGNPTR(uint64_t __3, void (*filter_fun)(TextBuffer *buffer, HookParam *hp)); // jichi 10/24/2014: Add filter function. Return false to skip the text
-	ALIGNPTR(uint64_t __7, void (*hook_after)(hook_stack *stack, TextBuffer buffer));
-	uint64_t hook_font;
-	ALIGNPTR(uint64_t __9, const wchar_t *newlineseperator);
+	ALIGNPTR(uint64_t __7, void (*embed_fun)(hook_stack *stack, TextBuffer buffer));
+	uint64_t embed_hook_font;
+	ALIGNPTR(uint64_t __9, const wchar_t *lineSeparator);
 	char name[HOOK_NAME_SIZE];
 	wchar_t hookcode[HOOKCODE_LEN];
 	HookParam()
@@ -123,7 +123,6 @@ struct HookParam
 		ZeroMemory(this, sizeof(HookParam));
 	}
 	uint64_t emu_addr;
-	int argidx;
 	JITTYPE jittype;
 	char unityfunctioninfo[1024];
 };
@@ -155,7 +154,7 @@ struct SearchParam
 	wchar_t boundaryModule[MAX_MODULE_SIZE] = {}; // hook all functions within this module (middle priority)
 	wchar_t exportModule[MAX_MODULE_SIZE] = {};	  // hook the exports of this module (highest priority)
 	wchar_t text[PATTERN_SIZE] = {};			  // text to search for
-	JITTYPE jittype;
+	bool isjithook;
 };
 struct InsertPCHooksCmd
 {
@@ -183,16 +182,11 @@ struct FindHookCmd // From host
 	SearchParam sp;
 };
 
-struct ConsoleOutputNotif // From dll
+struct HostInfoNotif // From dll
 {
-	ConsoleOutputNotif(std::string message = "") { strncpy_s(this->message, message.c_str(), MESSAGE_SIZE - 1); }
+	HostInfoNotif(std::string message = "") { strncpy_s(this->message, message.c_str(), MESSAGE_SIZE - 1); }
 	HostNotificationType command = HOST_NOTIFICATION_TEXT;
-	char message[MESSAGE_SIZE] = {};
-};
-struct WarningNotif // From dll
-{
-	WarningNotif(std::string message = "") { strncpy_s(this->message, message.c_str(), MESSAGE_SIZE - 1); }
-	HostNotificationType command = HOST_NOTIFICATION_WARNING;
+	HOSTINFO type;
 	char message[MESSAGE_SIZE] = {};
 };
 
@@ -237,26 +231,29 @@ struct TextBuffer
 	BYTE *const buff;
 	size_t size;
 	template <typename CharT>
-	void from_cs(const CharT *c)
+	void from(const CharT *c)
 	{
 		if (!c)
 			return;
 		size = strlenEx(c) * sizeof(CharT);
-		strncpyEx((CharT *)buff, c, TEXT_BUFFER_SIZE);
+		if(size)
+			strncpyEx((CharT *)buff, c, TEXT_BUFFER_SIZE);
 	}
 	template <typename StringT, typename = std::enable_if_t<!std::is_pointer_v<StringT>>>
 	void from(const StringT &c)
 	{
 		size = min(TEXT_BUFFER_SIZE, strSize(c));
-		memcpy(buff, c.data(), size);
+		if(size)
+			memcpy(buff, c.data(), size);
 	}
-	template <typename CharT>
-	void from(const CharT ptr, size_t t)
+	template <typename AddrT>
+	void from(const AddrT ptr, size_t t)
 	{
 		if (!ptr || !t)
 			return;
 		size = min(TEXT_BUFFER_SIZE, t);
-		memcpy(buff, (void *)ptr, size);
+		if(size)
+			memcpy(buff, (void *)ptr, size);
 	}
 	template <typename T>
 	void from_t(const T tm)
