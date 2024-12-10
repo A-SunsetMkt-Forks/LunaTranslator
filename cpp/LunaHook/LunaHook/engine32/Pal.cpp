@@ -86,7 +86,7 @@ static bool InsertOldPalHook() // this is used in case the new pattern does not 
   // hp.type = NO_CONTEXT|USING_SPLIT|DATA_INDIRECT; // 0x418
   // hp.type = NO_CONTEXT|USING_SPLIT|DATA_INDIRECT|RELATIVE_SPLIT;  // Use relative address to prevent floating issue
   hp.type = NO_CONTEXT | USING_SPLIT | DATA_INDIRECT;
-  hp.offset = get_reg(regs::eax); // eax
+  hp.offset = regoffset(eax); // eax
   ConsoleOutput("INSERT AMUSE CRAFT");
   return NewHook(hp, "Pal");
 }
@@ -115,7 +115,7 @@ namespace
   }
   LPSTR trimmedText;
   int trimmedSize;
-  void before(hook_stack *s, HookParam *hp, TextBuffer *buffer, uintptr_t *role)
+  void before(hook_context *s, HookParam *hp, TextBuffer *buffer, uintptr_t *role)
   {
     auto text = (LPSTR)s->stack[2]; // text in arg2
     if (!text || !*text)
@@ -131,7 +131,7 @@ namespace
       *role = s->stack[3] ? Engine::ScenarioRole : Engine::NameRole;
     buffer->from(trimmedText, trimmedSize);
   }
-  void after(hook_stack *s, TextBuffer buffer)
+  void after(hook_context *s, TextBuffer buffer)
   {
     std::string newData = buffer.strA();
     auto text = (LPSTR)s->stack[2]; // text in arg2
@@ -147,12 +147,9 @@ namespace
 
   std::string rubyRemove(std::string text)
   {
-    std::regex rx("<r(.*?)>(.*?)</r>");
-    text = std::regex_replace(text, rx, "$2");
-    std::regex rx2("<c(.*?)>(.*?)</c>");
-    text = std::regex_replace(text, rx2, "$2");
-    std::regex rx3("<s(.*?)>(.*?)</s>");
-    text = std::regex_replace(text, rx3, "$2");
+    text = std::regex_replace(text, std::regex("<r(.*?)>(.*?)</r>"), "$2");
+    text = std::regex_replace(text, std::regex("<c(.*?)>(.*?)</c>"), "$2");
+    text = std::regex_replace(text, std::regex("<s(.*?)>(.*?)</s>"), "$2");
     return text;
   }
 }
@@ -177,15 +174,15 @@ static bool InsertNewPal1Hook()
 
   HookParam hp;
   hp.address = addr;
-  hp.offset = get_stack(2); // arg2
+  hp.offset = stackoffset(2); // arg2
   hp.type = USING_STRING | EMBED_ABLE | NO_CONTEXT;
   hp.text_fun = before;
-  hp.hook_after = after;
+  hp.embed_fun = after;
   hp.filter_fun = [](TextBuffer *buffer, HookParam *hp)
   {
     buffer->from(rubyRemove(buffer->strA()));
   };
-  hp.hook_font = F_CreateFontIndirectA | F_CreateFontA;
+  hp.embed_hook_font = F_CreateFontIndirectA | F_CreateFontA;
   ConsoleOutput("INSERT Pal1");
   return NewHook(hp, "Pal");
 }
@@ -212,7 +209,7 @@ static bool InsertNewPal2Hook()
 
   HookParam hp;
   hp.address = addr;
-  hp.offset = get_stack(2); // arg2
+  hp.offset = stackoffset(2); // arg2
   hp.type = USING_STRING;
   ConsoleOutput("INSERT Pal2");
   return NewHook(hp, "Pal");
@@ -238,11 +235,11 @@ namespace
       return false;
     HookParam hp;
     hp.address = addr;
-    hp.offset = get_reg(regs::edx);
+    hp.offset = regoffset(edx);
     hp.type = USING_STRING | EMBED_ABLE | EMBED_AFTER_NEW;
     // 无法编码的字符无法显示，若开启dyna则会直接略过这个字，还不如不开。
     //[230929] [ユニゾンシフト] 恋とHしかしていない！
-    hp.newlineseperator = L"<br>";
+    hp.lineSeparator = L"<br>";
     hp.filter_fun = [](TextBuffer *buffer, HookParam *hp)
     {
       buffer->from(rubyRemove(buffer->strA()));
@@ -260,7 +257,7 @@ bool InsertPalHook() // use Old Pal first, which does not have ruby
     hp.type = USING_STRING | MODULE_OFFSET | FUNCTION_OFFSET;
     wcscpy_s(hp.module, L"Pal.dll");
     strcpy_s(hp.function, func);
-    hp.offset = get_stack(2);
+    hp.offset = stackoffset(2);
     succ |= NewHook(hp, func);
   }
   bool embed = InsertNewPal1Hook();

@@ -21,7 +21,7 @@ KiriKiri hook:
   char and we insert hook here to extract it.
 ********************************************************************************************/
 #if 0  // jichi 11/12/2013: not used
-static void SpecialHookKiriKiri(hook_stack* stack,  HookParam *, uintptr_t *data, uintptr_t *split, size_t*len)
+static void SpecialHookKiriKiri(hook_context *context,  HookParam *, uintptr_t *data, uintptr_t *split, size_t*len)
 {
   DWORD p1 =  *(DWORD *)(esp_base - 0x14),
         p2 =  *(DWORD *)(esp_base - 0x18);
@@ -167,9 +167,9 @@ bool FindKiriKiriHook(DWORD fun, DWORD size, DWORD pt, DWORD flag) // jichi 10/2
                     // ConsoleOutput(str);
                     HookParam hp;
                     hp.address = pt + k + 0x14;
-                    hp.offset = get_reg(regs::ebx);
+                    hp.offset = regoffset(ebx);
                     hp.index = -0x2;
-                    hp.split = get_reg(regs::ecx);
+                    hp.split = regoffset(ecx);
                     hp.type = CODEC_UTF16 | NO_CONTEXT | USING_SPLIT | DATA_INDIRECT;
                     ConsoleOutput("INSERT KiriKiri2");
                     if (!NewHook(hp, "KiriKiri2"))
@@ -185,12 +185,12 @@ bool FindKiriKiriHook(DWORD fun, DWORD size, DWORD pt, DWORD flag) // jichi 10/2
                       HookParam hp_1;
                       hp_1.address = addr;
                       hp_1.type = CODEC_UTF16 | NO_CONTEXT | USING_CHAR;
-                      hp_1.text_fun = [](hook_stack *stack, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
+                      hp_1.text_fun = [](hook_context *context, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
                       {
-                        *split = stack->ecx;
+                        *split = context->ecx;
                         if (*split != 0x16)
                           return;
-                        buffer->from_t(*(WORD *)(stack->ebx - 2));
+                        buffer->from_t(*(WORD *)(context->ebx - 2));
                       };
                       NewHook(hp_1, "KiriKiri2X");
                     }
@@ -205,9 +205,9 @@ bool FindKiriKiriHook(DWORD fun, DWORD size, DWORD pt, DWORD flag) // jichi 10/2
               // ConsoleOutput(str);
               HookParam hp;
               hp.address = (DWORD)pt + j;
-              hp.offset = get_reg(regs::eax);
+              hp.offset = regoffset(eax);
               hp.index = 0x14;
-              hp.split = get_reg(regs::eax);
+              hp.split = regoffset(eax);
               hp.type = CODEC_UTF16 | DATA_INDIRECT | USING_SPLIT | SPLIT_INDIRECT;
               ConsoleOutput("INSERT KiriKiri1");
               if (!NewHook(hp, "KiriKiri1"))
@@ -245,13 +245,13 @@ bool FindKiriKiriHook(DWORD fun, DWORD size, DWORD pt, DWORD flag) // jichi 10/2
                         HookParam hp;
                         hp.address = addr;
                         hp.type = CODEC_UTF16 | USING_STRING | NO_CONTEXT;
-                        hp.text_fun = [](hook_stack *stack, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
+                        hp.text_fun = [](hook_context *context, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
                         {
                           // fastcall, a4
-                          auto text = (kirikiri::ttstr *)stack->stack[9];
-                          auto destrect = (kirikiri::tTVPRect *)stack->eax;
+                          auto text = (kirikiri::ttstr *)context->stack[9];
+                          auto destrect = (kirikiri::tTVPRect *)context->eax;
                           //*split=destrect->Bottom-destrect->Top;//split by font size;不知道为什么destrect里面的值是乱七八糟的
-                          *split = stack->ecx; // y. 值似乎不是y，多行不会被分开。
+                          *split = context->ecx; // y. 值似乎不是y，多行不会被分开。
                           buffer->from(text->Ptr->LongString ? text->Ptr->LongString : text->Ptr->ShortString, text->Ptr->Length * 2);
                         };
                         NewHook(hp, "tTVPNativeBaseBitmap::DrawText");
@@ -394,7 +394,7 @@ bool KAGParserFilter(LPVOID data, size_t *size, HookParam *)
   return true;
 }
 
-void SpecialHookKAGParser(hook_stack* stack,  HookParam *, uintptr_t *data, uintptr_t *split, size_t*len)
+void SpecialHookKAGParser(hook_context *context,  HookParam *, uintptr_t *data, uintptr_t *split, size_t*len)
 {
   // 6e5622a8   66:833c48 5b     cmp word ptr ds:[eax+ecx*2],0x5b
   DWORD eax = regof(eax, esp_base),
@@ -406,7 +406,7 @@ void SpecialHookKAGParser(hook_stack* stack,  HookParam *, uintptr_t *data, uint
   }
 }
 
-void SpecialHookKAGParserEx(hook_stack* stack,  HookParam *, uintptr_t *data, uintptr_t *split, size_t*len)
+void SpecialHookKAGParserEx(hook_context *context,  HookParam *, uintptr_t *data, uintptr_t *split, size_t*len)
 {
   // 10013960   66:833c41 5b     cmp word ptr ds:[ecx+eax*2],0x5b
   DWORD eax = regof(eax, esp_base),
@@ -1049,7 +1049,7 @@ namespace
   {
     HookParam hp;
     hp.address = addr;
-    hp.offset = get_reg(regs::ecx);
+    hp.offset = regoffset(ecx);
     hp.split = hp.offset; // the same logic but diff value as KiriKiri1, use [ecx] as split
     hp.index = 0x14;      // the same as KiriKiri1
     hp.type = CODEC_UTF16 | DATA_INDIRECT | USING_SPLIT | SPLIT_INDIRECT;
@@ -1070,11 +1070,11 @@ namespace
     HookParam hp;
     hp.address = addr;
     hp.text_fun =
-        [](hook_stack *stack, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
+        [](hook_context *context, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
     {
       hp->text_fun = nullptr;
       hp->type = HOOK_EMPTY;
-      DWORD addr = stack->stack[0];                             // retaddr
+      DWORD addr = context->stack[0];                             // retaddr
       addr = MemDbg::findEnclosingAlignedFunction(addr, 0x400); // range is around 0x377c50 - 0x377a40 = 0x210
       if (!addr)
       {
@@ -1159,28 +1159,26 @@ bool Krkrtextrenderdll()
   if (GetProcAddress(module, "V2Link") == 0)
     return false;
 
-  bool b1 = [module]()
+  auto [minAddress, maxAddress] = Util::QueryModuleLimits(module);
+  bool b1 = [=]()
   {
-    auto [minAddress, maxAddress] = Util::QueryModuleLimits(module);
     BYTE bytes[] = {
         0x81, 0xEC, 0xFC, 0x00, 0x00, 0x00};
     auto addr = MemDbg::findBytes(bytes, sizeof(bytes), minAddress, maxAddress);
-    if (addr == 0)
+    if (!addr)
       return false;
     addr = MemDbg::findEnclosingAlignedFunction(addr);
-    if (addr == 0)
+    if (!addr)
       return false;
-    ConsoleOutput("textrender %p", addr);
     HookParam hp;
     hp.address = (DWORD)addr;
-    hp.offset = get_stack(2);
+    hp.offset = stackoffset(2);
     hp.type = CODEC_UTF16;
 
     return NewHook(hp, "krkr_textrender");
   }();
-  bool b2 = [module]()
+  bool b2 = [=]()
   {
-    auto [minAddress, maxAddress] = Util::QueryModuleLimits(module);
     BYTE bytes[] = {
         0xFF, XX,
         0x88, XX, XX, XX,
@@ -1194,119 +1192,104 @@ bool Krkrtextrenderdll()
         0xB0, 0x01,
         0xC3};
     auto addr = MemDbg::findBytes(bytes, sizeof(bytes), minAddress, maxAddress);
-    if (addr == 0)
+    if (!addr)
       return false;
-    ConsoleOutput("textrender %p", addr);
     HookParam hp;
     hp.address = addr - 0xb;
-    hp.offset = get_reg(regs::eax);
+    hp.offset = regoffset(eax);
     hp.type = CODEC_UTF16 | USING_STRING;
     hp.filter_fun = KiriKiriZ_msvcFilter;
     return NewHook(hp, "krkr_textrender");
   }();
-  return b1 || b2;
-}
-void KiriKiriZ3Filter(TextBuffer *buffer, HookParam *)
-{
-  auto text = reinterpret_cast<LPWSTR>(buffer->buff);
-
-  CharFilter(buffer, L'\x000A');
-  if (cpp_wcsnstr(text, L"%", buffer->size / sizeof(wchar_t)))
+  auto b3 = [=]()
   {
-    StringFilterBetween(buffer, L"%", 1, L"%", 1);
-  }
-}
-
-bool InsertKiriKiriZHook3()
-{
-
-  /*
-   * Sample games:
-   * https://vndb.org/r109253
-   */
-  const BYTE bytes[] = {
-      0x66, 0x83, 0x3F, 0x00, // cmp word ptr [edi],00          << hook here
-      0x75, 0x06,             // jne Imouto_no_Seiiki.exe+195C1
-      0x33, 0xDB,             // xor ebx,ebx
-      0x89, 0x1E,             // mov [esi],ebx
-      0xEB, 0x1B              // jmp Imouto_no_Seiiki.exe+195DC
+    auto [minAddress, maxAddress] = Util::QueryModuleLimits(module, 0, PAGE_READONLY);
+    char tjs[] = "tTJSVariant::tTJSVariant(const tjs_char *)";
+    auto addr = MemDbg::findBytes(tjs, sizeof(tjs), minAddress, maxAddress);
+    if (!addr)
+      return false;
+    addr = MemDbg::findPushAddress(addr, minAddress, maxAddress);
+    if (!addr)
+      return false;
+    addr = MemDbg::findEnclosingAlignedFunction(addr);
+    if (!addr)
+      return false;
+    HookParam hp;
+    hp.address = addr;
+    hp.offset = stackoffset(2);
+    hp.type = CODEC_UTF16 | USING_STRING | DATA_INDIRECT;
+    hp.text_fun = [](hook_context *context, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
+    {
+      auto text = *(wchar_t **)context->stack[2];
+      if (hp->user_value == context->retaddr)
+        return;
+      if (text[0] == L'%')
+      {
+        hp->user_value = context->retaddr;
+        return;
+      }
+      buffer->from(text);
+    };
+    return NewHook(hp, "krkr_textrender");
   };
-
-  ULONG range = min(processStopAddress - processStartAddress, MAX_REL_ADDR);
-  ULONG addr = MemDbg::findBytes(bytes, sizeof(bytes), processStartAddress, processStartAddress + range);
-  if (!addr)
-  {
-    ConsoleOutput("KiriKiriZ3: pattern not found");
-    return false;
-  }
-
-  HookParam hp;
-  hp.address = addr;
-  hp.offset = get_reg(regs::edi);
-  hp.split = get_reg(regs::edx);
-  hp.type = NO_CONTEXT | CODEC_UTF16 | USING_STRING | USING_SPLIT;
-  hp.filter_fun = KiriKiriZ3Filter;
-  ConsoleOutput("INSERT KiriKiriZ3");
-  return NewHook(hp, "KiriKiriZ3");
+  return b1 || b2 || b3();
 }
-
-void KiriKiriZ4Filter(TextBuffer *buffer, HookParam *)
+namespace
 {
-  auto text = reinterpret_cast<LPWSTR>(buffer->buff);
 
-  if (text[0] == L' ' || text[0] == L':' || text[0] == L'@' || text[0] == L'[' || text[0] == L']')
-    return buffer->clear();
-
-  if (cpp_wcsnstr(text, L"[", buffer->size / sizeof(wchar_t)))
+  void KiriKiri4Filter(TextBuffer *buffer, HookParam *)
   {
-    StringCharReplacer(buffer, L"[r]", 3, L' ');
+    auto ws = buffer->strW();
+    auto vw = buffer->viewW();
+    if ((!startWith(vw, L"[text]")) && (vw[0] == L'[' && vw[vw.size() - 1] == ']'))
+      return buffer->clear();
+    if (vw[0] == L' ' && vw.size() <= 2)
+      return buffer->clear();
+    if (vw[0] == L'@' || vw[0] == L']')
+      return buffer->clear();
+    if (startWith(vw, L" : ") && endWith(vw, L" : "))
+      return buffer->clear();
+    if (vw == L" line offset ")
+      return buffer->clear();
     StringFilterBetween(buffer, L"[", 1, L"]", 1);
   }
-}
 
-bool InsertKiriKiriZHook4()
-{
-
-  /*
-   * Sample games:
-   * https://vndb.org/r111774
-   * https://vndb.org/v38021
-   */
-  const BYTE bytes[] = {
-      0xE8, 0xE8, 0xBA, 0xFE, 0xFF, // call Shironagasu.exe+227B0       << hook here
-      0xC7, 0x45, 0xFC, XX4,        // mov [ebp-04],00000000
-      0xC7, 0x45, 0xF0, XX4,        // mov [ebp-10],00000001
-      0x8B, 0x45, 0x08              // mov eax,[ebp+08]
-  };
-
-  ULONG range = min(processStopAddress - processStartAddress, MAX_REL_ADDR);
-  ULONG addr = MemDbg::findBytes(bytes, sizeof(bytes), processStartAddress, processStartAddress + range);
-  if (!addr)
+  bool kagparser()
   {
-    ConsoleOutput("KiriKiriZ4: pattern not found");
-    return false;
+    auto hm = GetModuleHandle(L"KAGParser.dll");
+    if (!hm)
+      return false;
+    auto [s, e] = Util::QueryModuleLimits(hm, 0, PAGE_READONLY);
+    char tjs[] = "tTJSString tTJSString::operator +(const tjs_char *) const";
+    ULONG addr = MemDbg::findBytes(tjs, sizeof(tjs), s, e);
+    if (!addr)
+      return false;
+    addr = MemDbg::findBytes(&addr, sizeof(addr), s, e);
+    if (!addr)
+      return false;
+    addr = MemDbg::findEnclosingAlignedFunction(addr);
+    if (!addr)
+      return false;
+    auto succ = false;
+    HookParam hp = {};
+    hp.address = addr;
+    hp.offset = stackoffset(2);
+    hp.type = CODEC_UTF16 | USING_STRING;
+    hp.filter_fun = KiriKiri4Filter;
+    return NewHook(hp, "KAGParser");
   }
-
-  HookParam hp;
-  hp.address = addr;
-  hp.offset = get_reg(regs::ebx);
-  hp.type = NO_CONTEXT | CODEC_UTF16 | USING_STRING;
-  hp.filter_fun = KiriKiriZ4Filter;
-  ConsoleOutput("INSERT KiriKiriZ4");
-  return NewHook(hp, "KiriKiriZ4");
 }
 bool InsertKiriKiriZHook()
 {
   auto ok = Krkrtextrenderdll();
-  ok = InsertKiriKiriZHook3() || ok;
-  ok = InsertKiriKiriZHook4() || ok;
+  ok = kagparser();
   return InsertKiriKiriZHook2() || InsertKiriKiriZHook1() || ok;
 }
 namespace
 {
   int type = 0;
   std::wstring saveend = L"";
-  void hookafter(hook_stack *s, TextBuffer buffer)
+  void hookafter(hook_context *s, TextBuffer buffer)
   {
 
     auto newText = buffer.strW(); // EngineController::instance()->dispatchTextWSTD(innner, Engine::ScenarioRole, 0);
@@ -1324,7 +1307,7 @@ namespace
     auto text = (LPWSTR)s->esi;
     wcscpy(text, newText.c_str());
   }
-  void hookBefore(hook_stack *s, HookParam *hp, TextBuffer *buffer, uintptr_t *role)
+  void hookBefore(hook_context *s, HookParam *hp, TextBuffer *buffer, uintptr_t *role)
   {
     // シロガネオトメ
     auto text = (LPWSTR)s->esi;
@@ -1417,7 +1400,7 @@ namespace
     hp.address = addr;
     hp.type = EMBED_ABLE | CODEC_UTF16 | NO_CONTEXT;
     hp.text_fun = hookBefore;
-    hp.hook_after = hookafter;
+    hp.embed_fun = hookafter;
     return NewHook(hp, "EmbedKrkr2");
   }
 
@@ -1445,7 +1428,7 @@ namespace Private
     return fullWidthStr;
   }
 
-  void hookBeforez(hook_stack *s, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
+  void hookBeforez(hook_context *s, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
   {
 
     auto text = (LPCSTR)s->ecx;
@@ -1482,7 +1465,7 @@ namespace Private
 
     buffer->from(utf8save);
   }
-  void after(hook_stack *s, TextBuffer buffer)
+  void after(hook_context *s, TextBuffer buffer)
   {
 
     std::string res = buffer.strA(); // EngineController::instance()->dispatchTextWSTD(innner, Engine::ScenarioRole, 0);
@@ -1609,9 +1592,9 @@ dl 16
         hp.address = addr;
         hp.type = EMBED_ABLE | CODEC_UTF8 | NO_CONTEXT | USING_STRING;
         hp.text_fun = hookBeforez;
-        hp.hook_after = after;
-        hp.newlineseperator = L"\\n";
-        hp.hook_font = F_GetTextExtentPoint32W | F_GetGlyphOutlineW;
+        hp.embed_fun = after;
+        hp.lineSeparator = L"\\n";
+        hp.embed_hook_font = F_GetTextExtentPoint32W | F_GetGlyphOutlineW;
         succ |= NewHook(hp, "EmbedKrkrZ");
         // return true;
       }
@@ -1682,7 +1665,7 @@ namespace
         return buffer->clear();
       buffer->from(t);
     };
-    hp.hook_after = [](hook_stack *s, TextBuffer buffer)
+    hp.embed_fun = [](hook_context *s, TextBuffer buffer)
     {
       auto t = std::wstring((wchar_t *)s->stack[off / 4]);
       auto newText = buffer.strW();
@@ -1692,138 +1675,39 @@ namespace
         newText = newText + L"[r]"; // 揺り籠より天使まで
       wcscpy((wchar_t *)s->stack[off / 4], newText.c_str());
     };
-    hp.hook_font = F_GetTextExtentPoint32W | F_GetGlyphOutlineW;
+    hp.embed_hook_font = F_GetTextExtentPoint32W | F_GetGlyphOutlineW;
     return NewHook(hp, "Krkr2wcs");
   }
 }
-void KiriKiri3Filter(TextBuffer *buffer, HookParam *)
-{
-  auto text = reinterpret_cast<LPWSTR>(buffer->buff);
-  static std::wstring prevText;
-
-  text[buffer->size / sizeof(wchar_t)] = L'\0'; // clean text
-  if (!prevText.compare(text))
-    return buffer->clear();
-  prevText = text;
-
-  if (cpp_wcsnstr(text, L"[", buffer->size / sizeof(wchar_t)))
-  {
-    StringCharReplacer(buffer, L"[r]", 3, L' ');
-    StringFilterBetween(buffer, L"[", 1, L"]\\", 2);
-    // ruby type 1
-    StringFilterBetween(buffer, L"[mruby r=", 9, L"\" text=\"", 8); // [mruby r="ゆきみ" text="由紀美"]
-    // ruby type 2
-    StringFilterBetween(buffer, L"[ruby text=", 11, L"]", 1); // [ruby text="せんがわ" align="e"][ch text="仙川"]
-    StringFilter(buffer, L"[ch text=\"", 10);                 // [ruby text="せんがわ" align="e"][ch text="仙川"]
-    // ruby type 1-2
-    StringFilter(buffer, L"\"]", 2);
-    // end ruby
-    StringFilter(buffer, L"[heart]", 7);
-  }
-
-  StringCharReplacer(buffer, L"\uff0f", 1, L'\n');
-  if (cpp_wcsnstr(text, L"[", buffer->size / sizeof(wchar_t))) // detect garbage sentence. [ruby text=%r][ch text=%text][macropop]
-    return buffer->clear();
-}
-bool InsertKiriKiri3Hook()
-{
-
-  /*
-   * Sample games:
-   * https://vndb.org/v16190
-   * https://vndb.org/v43048
-   * https://vndb.org/v46112
-   * https://vndb.org/v20491
-   * https://vndb.org/v28695
-   * https://vndb.org/v5549
-   * https://vndb.org/v28513
-   * https://vndb.org/v46499
-   */
-  const BYTE bytes[] = {
-      0x75, 0x09,      // jne GAME.EXE+1D5B37
-      0x8B, 0x85, XX4, // mov eax,[ebp-00000254]
-      0xFF, 0x40, 0x78 // inc [eax+78]
-  };
-
-  ULONG range = min(processStopAddress - processStartAddress, MAX_REL_ADDR);
-  ULONG addr = MemDbg::findBytes(bytes, sizeof(bytes), processStartAddress, processStartAddress + range);
-  if (!addr)
-  {
-    ConsoleOutput("KiriKiri3: pattern not found");
-    return false;
-  }
-
-  HookParam hp;
-  hp.address = addr;
-  hp.offset = get_reg(regs::ecx);
-  hp.index = 0;
-  hp.split = get_reg(regs::eax);
-  hp.split_index = 0;
-  hp.type = CODEC_UTF16 | USING_STRING | USING_SPLIT;
-  hp.filter_fun = KiriKiri3Filter;
-  ConsoleOutput("INSERT KiriKiri3");
-  return NewHook(hp, "KiriKiri3");
-}
-
-void KiriKiri4Filter(TextBuffer *buffer, HookParam *)
-{
-  auto text = reinterpret_cast<LPWSTR>(buffer->buff);
-
-  if (text[0] == L'[' || text[0] == L'@' || (buffer->size <= 2 && text[0] == L' '))
-    return buffer->clear();
-
-  if (cpp_wcsnstr(text, L"[", buffer->size / sizeof(wchar_t)))
-  {
-    StringCharReplacer(buffer, L"[r]", 3, L' ');
-    StringFilterBetween(buffer, L"[", 1, L"]\\", 2);
-    // ruby type 1
-    StringFilterBetween(buffer, L"[mruby r=", 9, L"\" text=\"", 8); // [mruby r="ゆきみ" text="由紀美"]
-    // ruby type 2
-    StringFilterBetween(buffer, L"[ruby text=", 11, L"]", 1); // [ruby text="せんがわ" align="e"][ch text="仙川"]
-    StringFilterBetween(buffer, L"[Ruby text", 10, L"]", 1);  // [Ruby text = "Sawano"][ch text="沢野"]
-    StringFilter(buffer, L"[ch text=\"", 10);                 // [ruby text="せんがわ" align="e"][ch text="仙川"]
-    // ruby type 1-2
-    StringFilter(buffer, L"\"]", 2);
-    // end ruby
-    StringFilterBetween(buffer, L"[", 1, L"]", 1);
-  }
-}
-
 bool InsertKiriKiri4Hook()
 {
   /*
-   * Sample games:
-   * https://vndb.org/r114393
-   * https://vndb.org/v2916
-   * https://vndb.org/r117083
-   * https://vndb.org/v3851
-   * https://vndb.org/v7804
-   * https://vndb.org/v11123
-   * https://vndb.org/v18650
-   * https://vndb.org/v38034
-   */
+      v31 = 164;
+      sub_4016D4(a1 + 112, &word_6E6DD8 + 425);
+      ++v32;
+      sub_4016D4(&v34, *(wchar_t **)(a1 + 124));
+  */
   const BYTE bytes[] = {
-      0xE8, XX4,        // call Kansen1._GetExceptDLLinfo+67B      <-- hook here
-      0x8D, 0x45, 0xA4, // lea eax,[ebp-5C]
-      0xFF, 0x45, 0x9C, // inc [ebp-64]
-      0xE8, XX4         // call Kansen1.exe+1D561C
-  };
-  ULONG range = min(processStopAddress - processStartAddress, MAX_REL_ADDR);
-  ULONG addr = MemDbg::findBytes(bytes, sizeof(bytes), processStartAddress, processStartAddress + range);
+      0x66, 0xc7, 0x45, XX, 0xa4, 0x00,
+      XX, XX, XX,
+      XX, XX, XX4,
+      XX, XX, XX,
+      0xe8, XX4,
+      XX, XX, XX,
+      XX, XX, XX,
+      XX, XX, XX,
+      0x8B, 0x53, XX,
+      0xe8, XX4};
+  ULONG addr = MemDbg::findBytes(bytes, sizeof(bytes), processStartAddress, processStopAddress);
   if (!addr)
-  {
-    ConsoleOutput("KiriKiri4: pattern not found");
     return false;
-  }
 
   HookParam hp = {};
-  hp.address = addr;
-  hp.offset = get_reg(regs::edx);
+  hp.address = addr + sizeof(bytes) - 5;
+  hp.offset = regoffset(edx);
   hp.type = NO_CONTEXT | CODEC_UTF16 | USING_STRING;
   hp.filter_fun = KiriKiri4Filter;
-  ConsoleOutput(" INSERT KiriKiri4");
-  NewHook(hp, "KiriKiri4");
-  return true;
+  return NewHook(hp, "KiriKiri4");
 }
 bool KiriKiri::attach_function()
 {
@@ -1841,5 +1725,5 @@ bool KiriKiri::attach_function()
   bool b1 = attachkr2(processStartAddress, processStopAddress);
   bool _3 = wcslen_wcscpy();
   auto _ = InsertKiriKiriHook() || InsertKiriKiriZHook() || b1 || _3;
-  return (InsertKiriKiri4Hook() | InsertKiriKiri3Hook()) || _;
+  return InsertKiriKiri4Hook() || _;
 }

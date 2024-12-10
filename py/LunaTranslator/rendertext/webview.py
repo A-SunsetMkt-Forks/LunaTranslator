@@ -2,7 +2,8 @@ from qtsymbols import *
 from rendertext.somefunctions import dataget
 import gobject, uuid, json, os, functools, windows, time
 from urllib.parse import quote
-from myutils.config import globalconfig, static_data
+from myutils.utils import threader
+from myutils.config import globalconfig, static_data, _TR
 from myutils.wrapper import tryprint, threader
 from gui.usefulwidget import WebivewWidget
 
@@ -45,7 +46,6 @@ class TextBrowser(QWidget, dataget):
         # webview2当会执行alert之类的弹窗js时，若qt窗口不可视，会卡住
         self.webivewwidget = WebivewWidget(self, usedarklight=False)
 
-        # webview2无法接收qt事件。
         webviewhwnd = self.webivewwidget.get_hwnd()
         self.wndproc = windows.WNDPROCTYPE(
             functools.partial(
@@ -54,7 +54,25 @@ class TextBrowser(QWidget, dataget):
             )
         )
         windows.SetWindowLongPtr(webviewhwnd, windows.GWLP_WNDPROC, self.wndproc)
-
+        self.webivewwidget.add_menu(
+            0,
+            _TR("朗读"),
+            lambda w: gobject.baseobject.read_text(w.replace("\n", "").strip()),
+        )
+        self.webivewwidget.add_menu(
+            0,
+            _TR("翻译"),
+            lambda w: gobject.baseobject.textgetmethod(w.replace("\n", "").strip()),
+        )
+        self.webivewwidget.add_menu(
+            0,
+            _TR("查词"),
+            threader(
+                lambda w: gobject.baseobject.searchwordW.search_word.emit(
+                    w.replace("\n", "").strip(), False
+                )
+            ),
+        )
         self.masklabel_left = QLabel(self)
         self.masklabel_left.setMouseTracking(True)
         # self.masklabel_left.setStyleSheet('background-color:red')
@@ -66,13 +84,14 @@ class TextBrowser(QWidget, dataget):
         self.masklabel_top = QLabel(self)
         self.masklabel_top.setMouseTracking(True)
         # self.masklabel_bottom.setStyleSheet('background-color:red')
-        self.saveclickfunction = {}
         self.webivewwidget.navigate(
             os.path.abspath(r"LunaTranslator\rendertext\webview.html")
         )
         self.webivewwidget.set_transparent_background()
         self.webivewwidget.dropfilecallback.connect(self.dropfilecallback)
-        self.webivewwidget.bind("calllunaclickedword", self.calllunaclickedword)
+        self.webivewwidget.bind(
+            "calllunaclickedword", gobject.baseobject.clickwordcallback
+        )
         self.webivewwidget.bind("calllunaheightchange", self.calllunaheightchange)
         self.saveiterclasspointer = {}
         self.isfirst = True
@@ -180,13 +199,6 @@ class TextBrowser(QWidget, dataget):
             )
         )
 
-    def calllunaclickedword(self, wordinfo):
-        clickfunction = wordinfo.get("clickfunction", None)
-        if clickfunction:
-            self.saveclickfunction.get(clickfunction)(False)
-        else:
-            gobject.baseobject.clickwordcallback(wordinfo, False)
-
     # native api end
 
     def iter_append(self, iter_context_class, origin, atcenter, name, text, color):
@@ -259,12 +271,6 @@ class TextBrowser(QWidget, dataget):
                 isfenciclick=isfenciclick,
                 line_height=line_height,
             )
-            for _tag in tag:
-                clickfunction = _tag.get("clickfunction", None)
-                if clickfunction:
-                    func = "luna" + str(uuid.uuid4()).replace("-", "_")
-                    _tag["clickfunction"] = func
-                    self.saveclickfunction[func] = clickfunction
             self.create_internal_rubytext(style, styleargs, _id, tag, args)
         else:
             sig = "LUNASHOWHTML"

@@ -1,5 +1,6 @@
 
 #include "MinHook.h"
+#define DUMP_JIT_ADDR_MAP 0
 namespace
 {
 	SearchParam sp;
@@ -9,7 +10,6 @@ namespace
 	{
 		uint64_t address = 0;
 		uint64_t em_addr = 0;
-		int argidx = 0;
 		intptr_t padding = 0;
 		int offset = 0;
 		JITTYPE jittype;
@@ -95,7 +95,6 @@ namespace
 	constexpr int addr_offset = 50, send_offset = 60, original_offset = 126, registers = 16;
 #endif
 }
-
 bool IsBadReadPtr(void *data)
 {
 	if (data > records.get() && data < records.get() + sp.maxRecords)
@@ -132,15 +131,22 @@ void DoSend(int i, uintptr_t address, char *str, intptr_t padding, JITTYPE jitty
 	__try
 	{
 		int length = 0, sum = 0;
-		for (; (str[length] || str[length + 1]) && length < MAX_STRING_SIZE; length += 2)
+		for (; *(uint16_t *)(str + length) && length < MAX_STRING_SIZE; length += sizeof(uint16_t))
 			sum += *(uint16_t *)(str + length);
+#if DUMP_JIT_ADDR_MAP
+		if (((length > STRING) || (IsDBCSLeadByteEx(932, *str))) && length < MAX_STRING_SIZE - 1)
+#else
 		if (length > STRING && length < MAX_STRING_SIZE - 1)
+#endif
 		{
 			// many duplicate results with same address, offset, and third/fourth character will be found: filter them out
 			uint64_t signature = ((uint64_t)i << 56) | ((uint64_t)(str[2] + str[3]) << 48) | address;
+#if DUMP_JIT_ADDR_MAP
+#else
 			if (signatureCache[signature % CACHE_SIZE] == signature)
 				return;
 			signatureCache[signature % CACHE_SIZE] = signature;
+#endif
 			// if there are huge amount of strings that are the same, it's probably garbage: filter them out
 			// can't store all the strings, so use sum as heuristic instead
 			if (_InterlockedIncrement(sumCache + (sum % CACHE_SIZE)) > 25)
@@ -158,7 +164,7 @@ void DoSend(int i, uintptr_t address, char *str, intptr_t padding, JITTYPE jitty
 				else
 				{
 					records[n].em_addr = em_addr;
-					records[n].argidx = i;
+					records[n].offset = i;
 				}
 
 				for (int j = 0; j < length; ++j)
@@ -176,7 +182,7 @@ void DoSend(int i, uintptr_t address, char *str, intptr_t padding, JITTYPE jitty
 	{
 	}
 }
-void Send(char **stack, uintptr_t address)
+void Send(char **strs, uintptr_t address)
 {
 	// it is unsafe to call ANY external functions from this, as they may have been hooked (if called the hook would call this function making an infinite loop)
 	// the exceptions are compiler intrinsics like _InterlockedDecrement
@@ -184,12 +190,12 @@ void Send(char **stack, uintptr_t address)
 		return;
 	for (int i = -registers; i < 10; ++i)
 	{
-		DoSend(i, address, stack[i], 0);
+		DoSend(i, address, strs[i], 0);
 		if (sp.padding)
-			DoSend(i, address, stack[i], sp.padding);
+			DoSend(i, address, strs[i], sp.padding);
 	}
 }
-void SafeSendJitVeh(hook_stack *stack, uintptr_t address, uint64_t em_addr, JITTYPE jittype, intptr_t padding)
+void SafeSendJitVeh(hook_context *context, uintptr_t address, uint64_t em_addr, JITTYPE jittype, intptr_t padding)
 {
 	__try
 	{
@@ -200,17 +206,17 @@ void SafeSendJitVeh(hook_stack *stack, uintptr_t address, uint64_t em_addr, JITT
 			{
 #ifdef _WIN64
 			case JITTYPE::YUZU:
-				str = (char *)YUZU::emu_arg(stack, em_addr)[i];
+				str = (char *)YUZU::emu_arg(context, em_addr)[i];
 				break;
 			case JITTYPE::VITA3K:
-				str = (char *)VITA3K::emu_arg(stack)[i];
+				str = (char *)VITA3K::emu_arg(context)[i];
 				break;
 			case JITTYPE::RPCS3:
-				str = (char *)RPCS3::emu_arg(stack)[i];
+				str = (char *)RPCS3::emu_arg(context)[i];
 				break;
 #endif
 			case JITTYPE::PPSSPP:
-				str = (char *)PPSSPP::emu_arg(stack)[i];
+				str = (char *)PPSSPP::emu_arg(context)[i];
 				break;
 			default:
 				return;
@@ -225,7 +231,7 @@ void SafeSendJitVeh(hook_stack *stack, uintptr_t address, uint64_t em_addr, JITT
 	}
 }
 std::unordered_map<uintptr_t, uint64_t> addresscalledtime;
-bool SendJitVeh(PCONTEXT context, uintptr_t address, uint64_t em_addr, JITTYPE jittype, intptr_t padding)
+bool SendJitVeh(PCONTEXT pcontext, uintptr_t address, uint64_t em_addr, JITTYPE jittype, intptr_t padding)
 {
 	if (safeautoleaveveh)
 		return true;
@@ -237,9 +243,8 @@ bool SendJitVeh(PCONTEXT context, uintptr_t address, uint64_t em_addr, JITTYPE j
 	if (tm - addresscalledtime[address] < 100)
 		return false;
 	addresscalledtime[address] = tm;
-	auto stack = std::make_unique<hook_stack>();
-	context_get(stack.get(), context);
-	SafeSendJitVeh(stack.get(), address, em_addr, jittype, padding);
+	hook_context context = hook_context::fromPCONTEXT(pcontext);
+	SafeSendJitVeh(&context, address, em_addr, jittype, padding);
 	return true;
 }
 std::vector<uintptr_t> GetFunctions(uintptr_t module)
@@ -283,12 +288,12 @@ void SearchForHooks_Return()
 		hp.codepage = sp.codepage;
 		hp.jittype = records[i].jittype;
 		hp.padding = records[i].padding;
+		hp.offset = records[i].offset;
 
 		if (records[i].jittype == JITTYPE::PC)
 		{
 			if (!records[i].address)
 				continue;
-			hp.offset = records[i].offset;
 			hp.type = CODEC_UTF16 | USING_STRING;
 			hp.address = records[i].address;
 		}
@@ -298,7 +303,6 @@ void SearchForHooks_Return()
 				continue;
 			hp.emu_addr = records[i].em_addr;
 			hp.type = CODEC_UTF16 | USING_STRING | BREAK_POINT | NO_CONTEXT;
-			hp.argidx = records[i].argidx;
 		}
 		NotifyHookFound(hp, (wchar_t *)records[i].text);
 		if (++results % 100'000 == 0)
@@ -335,7 +339,7 @@ void SearchForHooks(SearchParam spUser)
 		initrecords();
 
 		std::vector<uintptr_t> addresses;
-		if( sp.jittype==JITTYPE::PC)
+		if( !sp.isjithook)
 		{
 			if (*sp.boundaryModule) {
 				auto [minaddr,maxaddr]=Util::QueryModuleLimits(GetModuleHandleW(sp.boundaryModule));
@@ -472,6 +476,13 @@ void SearchForHooks(SearchParam spUser)
 			}
 			ConsoleOutput("%p %p",minemaddr,maxemaddr);
 			ConsoleOutput("%p %p",sp.minAddress,sp.maxAddress);
+#if DUMP_JIT_ADDR_MAP
+				auto f=fopen("1.txt","a");
+				for(auto addr:jitaddr2emuaddr){
+					fprintf(f,"%llx => %llx\n", addr.second.second ,addr.first);
+				}
+				fclose(f);
+#endif
 			for(auto addr:jitaddr2emuaddr){
 				//ConsoleOutput("%llx => %p", addr.second.second ,addr.first);
 				if(addr.second.second>sp.maxAddress||addr.second.second<sp.minAddress)continue;

@@ -26,9 +26,8 @@ inline SECURITY_ATTRIBUTES allAccess = std::invoke([] // allows non-admin proces
 	SetSecurityDescriptorDacl(&sd, TRUE, NULL, FALSE);
 	return SECURITY_ATTRIBUTES{ sizeof(SECURITY_ATTRIBUTES), &sd, FALSE }; });
 
-struct hook_stack
+struct hook_context
 {
-
 #ifndef _WIN64
 	uintptr_t _eflags; // pushfd
 	uintptr_t edi,	   // pushad
@@ -65,16 +64,120 @@ struct hook_stack
 		uintptr_t retaddr;
 		BYTE base[1];
 	};
-	uintptr_t get_base()
+	void toPCONTEXT(PCONTEXT pcontext)
 	{
-		return (uintptr_t)this + sizeof(hook_stack) - sizeof(uintptr_t);
+#ifndef _WIN64
+		pcontext->Eax = eax;
+		pcontext->Ecx = ecx;
+		pcontext->Edx = edx;
+		pcontext->Ebx = ebx;
+		pcontext->Esp = esp;
+		pcontext->Ebp = ebp;
+		pcontext->Esi = esi;
+		pcontext->Edi = edi;
+		pcontext->EFlags = eflags;
+#else
+		pcontext->Rax = rax;
+		pcontext->Rbx = rbx;
+		pcontext->Rcx = rcx;
+		pcontext->Rdx = rdx;
+		pcontext->Rsp = rsp;
+		pcontext->Rbp = rbp;
+		pcontext->Rsi = rsi;
+		pcontext->Rdi = rdi;
+		pcontext->R8 = r8;
+		pcontext->R9 = r9;
+		pcontext->R10 = r10;
+		pcontext->R11 = r11;
+		pcontext->R12 = r12;
+		pcontext->R13 = r13;
+		pcontext->R14 = r14;
+		pcontext->R15 = r15;
+		pcontext->EFlags = eflags;
+#endif
+	}
+	static hook_context fromPCONTEXT(PCONTEXT pcontext)
+	{
+		hook_context context;
+#ifndef _WIN64
+		context.eax = pcontext->Eax;
+		context.ecx = pcontext->Ecx;
+		context.edx = pcontext->Edx;
+		context.ebx = pcontext->Ebx;
+		context.esp = pcontext->Esp;
+		context.ebp = pcontext->Ebp;
+		context.esi = pcontext->Esi;
+		context.edi = pcontext->Edi;
+		context.eflags = pcontext->EFlags;
+		context.retaddr = *(DWORD *)pcontext->Esp;
+#else
+		context.rax = pcontext->Rax;
+		context.rbx = pcontext->Rbx;
+		context.rcx = pcontext->Rcx;
+		context.rdx = pcontext->Rdx;
+		context.rsp = pcontext->Rsp;
+		context.rbp = pcontext->Rbp;
+		context.rsi = pcontext->Rsi;
+		context.rdi = pcontext->Rdi;
+		context.r8 = pcontext->R8;
+		context.r9 = pcontext->R9;
+		context.r10 = pcontext->R10;
+		context.r11 = pcontext->R11;
+		context.r12 = pcontext->R12;
+		context.r13 = pcontext->R13;
+		context.r14 = pcontext->R14;
+		context.r15 = pcontext->R15;
+		context.eflags = pcontext->EFlags;
+		context.retaddr = *(DWORD64 *)pcontext->Rsp;
+#endif
+		return context;
+	}
+	static hook_context *fromBase(uintptr_t lpDataBase)
+	{
+		return (hook_context *)(lpDataBase - offsetof(hook_context, base));
+	}
+	inline uintptr_t &argof(int idx)
+	{
+#ifdef _WIN64
+		auto offset = 0;
+		switch (idx)
+		{
+		case 1:
+			return rcx;
+		case 2:
+			return rdx;
+		case 3:
+			return r8;
+		case 4:
+			return r9;
+		default:
+			return stack[idx];
+		}
+#else
+		return stack[idx];
+#endif
 	}
 };
+#define regoffset(reg) ((int)offsetof(hook_context, reg) - (int)offsetof(hook_context, base))
+#define stackoffset(idx) ((int)offsetof(hook_context, stack[idx]) - (int)offsetof(hook_context, base))
+#ifndef _WIN64
+#define GETARG1 stackoffset(1)
+#define GETARG2 stackoffset(2)
+#define GETARG3 stackoffset(3)
+#define GETARG4 stackoffset(4)
+#define THISCALLARG1 stack[1]
+#define LASTRETVAL eax
+#define THISCALLTHIS ecx
+#else
+#define GETARG1 regoffset(rcx)
+#define GETARG2 regoffset(rdx)
+#define GETARG3 regoffset(r8)
+#define GETARG4 regoffset(r9)
+#define THISCALLARG1 rdx
+#define LASTRETVAL rax
+#define THISCALLTHIS rcx
+#endif
 
-inline hook_stack *get_hook_stack(uintptr_t lpDataBase)
-{
-	return (hook_stack *)(lpDataBase - sizeof(hook_stack) + sizeof(uintptr_t));
-}
 // jichi 3/7/2014: Add guessed comment
 
 #define ALIGNPTR(Y, X) \
@@ -111,11 +214,11 @@ struct HookParam
 	short length_offset;					   // index of the string length
 	ALIGNPTR(uint64_t __1, uintptr_t padding); // padding before string
 	ALIGNPTR(uint64_t __12, uintptr_t user_value);
-	ALIGNPTR(uint64_t __2, void (*text_fun)(hook_stack *stack, HookParam *hp, TextBuffer *buffer, uintptr_t *split))
+	ALIGNPTR(uint64_t __2, void (*text_fun)(hook_context *context, HookParam *hp, TextBuffer *buffer, uintptr_t *split))
 	ALIGNPTR(uint64_t __3, void (*filter_fun)(TextBuffer *buffer, HookParam *hp)); // jichi 10/24/2014: Add filter function. Return false to skip the text
-	ALIGNPTR(uint64_t __7, void (*hook_after)(hook_stack *stack, TextBuffer buffer));
-	uint64_t hook_font;
-	ALIGNPTR(uint64_t __9, const wchar_t *newlineseperator);
+	ALIGNPTR(uint64_t __7, void (*embed_fun)(hook_context *context, TextBuffer buffer));
+	uint64_t embed_hook_font;
+	ALIGNPTR(uint64_t __9, const wchar_t *lineSeparator);
 	char name[HOOK_NAME_SIZE];
 	wchar_t hookcode[HOOKCODE_LEN];
 	HookParam()
@@ -123,9 +226,7 @@ struct HookParam
 		ZeroMemory(this, sizeof(HookParam));
 	}
 	uint64_t emu_addr;
-	int argidx;
 	JITTYPE jittype;
-	char unityfunctioninfo[1024];
 };
 
 struct ThreadParam
@@ -155,7 +256,7 @@ struct SearchParam
 	wchar_t boundaryModule[MAX_MODULE_SIZE] = {}; // hook all functions within this module (middle priority)
 	wchar_t exportModule[MAX_MODULE_SIZE] = {};	  // hook the exports of this module (highest priority)
 	wchar_t text[PATTERN_SIZE] = {};			  // text to search for
-	JITTYPE jittype;
+	bool isjithook;
 };
 struct InsertPCHooksCmd
 {
@@ -183,16 +284,11 @@ struct FindHookCmd // From host
 	SearchParam sp;
 };
 
-struct ConsoleOutputNotif // From dll
+struct HostInfoNotif // From dll
 {
-	ConsoleOutputNotif(std::string message = "") { strncpy_s(this->message, message.c_str(), MESSAGE_SIZE - 1); }
+	HostInfoNotif(std::string message = "") { strncpy_s(this->message, message.c_str(), MESSAGE_SIZE - 1); }
 	HostNotificationType command = HOST_NOTIFICATION_TEXT;
-	char message[MESSAGE_SIZE] = {};
-};
-struct WarningNotif // From dll
-{
-	WarningNotif(std::string message = "") { strncpy_s(this->message, message.c_str(), MESSAGE_SIZE - 1); }
-	HostNotificationType command = HOST_NOTIFICATION_WARNING;
+	HOSTINFO type;
 	char message[MESSAGE_SIZE] = {};
 };
 
@@ -237,26 +333,29 @@ struct TextBuffer
 	BYTE *const buff;
 	size_t size;
 	template <typename CharT>
-	void from_cs(const CharT *c)
+	void from(const CharT *c)
 	{
 		if (!c)
 			return;
 		size = strlenEx(c) * sizeof(CharT);
-		strncpyEx((CharT *)buff, c, TEXT_BUFFER_SIZE);
+		if (size)
+			strncpyEx((CharT *)buff, c, TEXT_BUFFER_SIZE);
 	}
 	template <typename StringT, typename = std::enable_if_t<!std::is_pointer_v<StringT>>>
 	void from(const StringT &c)
 	{
 		size = min(TEXT_BUFFER_SIZE, strSize(c));
-		memcpy(buff, c.data(), size);
+		if (size)
+			memcpy(buff, c.data(), size);
 	}
-	template <typename CharT>
-	void from(const CharT ptr, size_t t)
+	template <typename AddrT>
+	void from(const AddrT ptr, size_t t)
 	{
 		if (!ptr || !t)
 			return;
 		size = min(TEXT_BUFFER_SIZE, t);
-		memcpy(buff, (void *)ptr, size);
+		if (size)
+			memcpy(buff, (void *)ptr, size);
 	}
 	template <typename T>
 	void from_t(const T tm)

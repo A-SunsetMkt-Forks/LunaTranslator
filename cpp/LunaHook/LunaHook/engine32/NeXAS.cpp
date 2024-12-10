@@ -278,16 +278,16 @@ bool InsertNeXASHookA()
     {
       HookParam hp;
       hp.address = addr2;
-      hp.text_fun = [](hook_stack *stack, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
+      hp.text_fun = [](hook_context *context, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
       {
-        auto v1 = stack->ecx;
+        auto v1 = context->ecx;
         const unsigned __int8 *v9;
         if (*(DWORD *)(v1 + 288) < 0x10u)
           v9 = (const unsigned __int8 *)(v1 + 268);
         else
           v9 = *(const unsigned __int8 **)(v1 + 268);
 
-        buffer->from_cs((char *)v9);
+        buffer->from((char *)v9);
       };
       if (NewHook(hp, "NeXAS_1"))
         return true;
@@ -308,9 +308,9 @@ bool InsertNeXASHookA()
   {
     HookParam hp;
     hp.address = addrx + sizeof(sig2) - 5;
-    hp.offset = get_reg(regs::eax);
+    hp.offset = regoffset(eax);
     hp.type = USING_STRING;
-    hp.newlineseperator = L"@n";
+    hp.lineSeparator = L"@n";
     hp.filter_fun = [](TextBuffer *buffer, HookParam *)
     {
       auto s = buffer->strA();
@@ -339,10 +339,10 @@ bool InsertNeXASHookA()
   hp.address = addr;
   // hp.type = USING_STRING|USING_SPLIT;
   hp.type = CODEC_ANSI_BE | NO_CONTEXT | USING_SPLIT;
-  hp.offset = get_stack(1);
+  hp.offset = stackoffset(1);
 
   // Either lpgm or lpmat2 are good choices
-  hp.split = get_stack(3);
+  hp.split = stackoffset(3);
   // hp.split = arg7_lpmat2; // = 0x18, arg7
 
   ConsoleOutput("INSERT NeXAS");
@@ -379,7 +379,7 @@ bool InsertNeXASHookW()
     hp.address = addr;
     hp.type = USING_STRING | CODEC_UTF8; // utf8编码的单字符
     hp.user_value = (DWORD) new nexassomeinfo{*(DWORD *)(addrx + 2), *(DWORD *)(addrx + 9), 0};
-    hp.text_fun = [](hook_stack *stack, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
+    hp.text_fun = [](hook_context *context, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
     {
       /*
        v17 = *(_DWORD *)(this + 188) < 0x10u;
@@ -389,7 +389,7 @@ bool InsertNeXASHookW()
       v18 = *(const CHAR **)(this + 168);
     sub_42A120(v34, v18, *(_DWORD *)(this + 184));//utf8转utf16
       */
-      auto v1 = stack->ecx;
+      auto v1 = context->ecx;
       const unsigned __int8 *v9;
       auto off1 = ((nexassomeinfo *)hp->user_value)->off1; // 188,0xbc
       auto off2 = ((nexassomeinfo *)hp->user_value)->off2; // 168,0xa8
@@ -398,10 +398,10 @@ bool InsertNeXASHookW()
       else
         v9 = *(const unsigned __int8 **)(v1 + off2);
 
-      buffer->from_cs((char *)v9);
+      buffer->from((char *)v9);
       if (((nexassomeinfo *)hp->user_value)->split == 0)
-        ((nexassomeinfo *)hp->user_value)->split = stack->stack[1];
-      *split = std::abs((long long)((nexassomeinfo *)hp->user_value)->split - (long long)stack->stack[1]) < 0x10;
+        ((nexassomeinfo *)hp->user_value)->split = context->stack[1];
+      *split = std::abs((long long)((nexassomeinfo *)hp->user_value)->split - (long long)context->stack[1]) < 0x10;
       // 文本会被分成两个线程，原因未知。人名线程是比文本小很多的，两个文本线程离得很近
       // 不能不分，不分会导致沾到一起。
     };
@@ -427,7 +427,7 @@ namespace
     hp.address = addr + 9;
     hp.type = DATA_INDIRECT;
     hp.index = 0;
-    hp.offset = get_reg(regs::ecx);
+    hp.offset = regoffset(ecx);
     hp.filter_fun = [](TextBuffer *buffer, HookParam *)
     {
       auto text = reinterpret_cast<LPSTR>(buffer->buff);
@@ -461,10 +461,10 @@ namespace
     HookParam hp;
     hp.address = addr;
     hp.type = USING_STRING;
-    hp.text_fun = [](hook_stack *stack, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
+    hp.text_fun = [](hook_context *context, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
     {
-      auto a2 = (TextUnionA *)stack->stack[1]; // std::string*
-      buffer->from_cs(a2->getText());
+      auto a2 = (TextUnionA *)context->stack[1]; // std::string*
+      buffer->from(a2->getText());
     };
     hp.filter_fun = [](TextBuffer *buffer, HookParam *hp)
     {
@@ -483,7 +483,7 @@ namespace
         }
       }
     };
-    hp.newlineseperator = L"@n";
+    hp.lineSeparator = L"@n";
     return NewHook(hp, "NeXAS3");
   }
 }

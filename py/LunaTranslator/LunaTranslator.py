@@ -9,8 +9,8 @@ from myutils.config import (
     savehook_new_data,
     static_data,
     getlanguse,
-    set_font_default,
     _TR,
+    get_platform,
     isascii,
 )
 from myutils.utils import (
@@ -32,7 +32,6 @@ from textsource.texthook import texthook
 from textsource.ocrtext import ocrtext
 from textsource.textsourcebase import basetext
 from textsource.filetrans import filetrans
-from textsource.livecaptions import livecaptions
 from gui.selecthook import hookselect
 from gui.translatorUI import TranslatorWindow
 import functools, gobject
@@ -76,7 +75,7 @@ class MAINUI:
         self.edittextui_cached = None
         self.edittextui_sync = True
         self.notifyonce = set()
-        self.audioplayer = series_audioplayer()
+        self.audioplayer = series_audioplayer(playovercallback=self.ttsautoforward)
         self._internal_reader = None
         self.reader_uid = None
         self.__hwnd = None
@@ -87,6 +86,16 @@ class MAINUI:
         self.autoswitchgameuid = True
         self.istriggertoupdate = False
         self.thishastranslated = True
+
+    @threader
+    def ttsautoforward(self):
+        if not globalconfig["ttsautoforward"]:
+            return
+        windows.SetForegroundWindow(self.hwnd)
+        time.sleep(0.001)
+        windows.keybd_event(windows.VK_RETURN, 0, 0, 0)
+        time.sleep(0.001)
+        windows.keybd_event(windows.VK_RETURN, 0, windows.KEYEVENTF_KEYUP, 0)
 
     def maybesetimage(self, pair):
         if self.showocrimage:
@@ -376,18 +385,23 @@ class MAINUI:
         text_solved, optimization_params = self.solvebeforetrans(text)
 
         maybehaspremt = {}
+        skip_other_on_success = False
         fix_rank = globalconfig["fix_translate_rank_rank"].copy()
-
-        if "premt" in self.translators:
+        if "rengong" in self.translators:
+            contentraw = self.analyzecontent(text_solved, optimization_params)
             try:
-                contentraw = text_solved
-                for _ in optimization_params:
-                    if isinstance(_, dict):
-                        _gpt_dict = _.get("gpt_dict", None)
-                        if _gpt_dict is None:
-                            continue
-                        contentraw = _.get("gpt_dict_origin")
+                res = self.translators["rengong"].translate(contentraw)
+            except:
+                print_exc()
+                res = None
+            maybehaspremt["rengong"] = res
+            skip_other_on_success = (
+                res and self.translators["rengong"].config["skip_other_on_success"]
+            )
 
+        if (not skip_other_on_success) and ("premt" in self.translators):
+            contentraw = self.analyzecontent(text_solved, optimization_params)
+            try:
                 maybehaspremt = self.translators["premt"].translate(contentraw)
             except:
                 print_exc()
@@ -396,11 +410,13 @@ class MAINUI:
             fix_rank = fix_rank[:idx] + other + fix_rank[idx + 1 :]
 
         real_fix_rank = []
-
-        for engine in fix_rank:
-            if (engine not in self.translators) and (engine not in maybehaspremt):
-                continue
-            real_fix_rank.append(engine)
+        if skip_other_on_success:
+            real_fix_rank.append("rengong")
+        else:
+            for engine in fix_rank:
+                if (engine not in self.translators) and (engine not in maybehaspremt):
+                    continue
+                real_fix_rank.append(engine)
 
         if len(real_fix_rank) == 0:
             return _showrawfunction()
@@ -437,6 +453,15 @@ class MAINUI:
                 result=maybehaspremt.get(engine),
             )
         return True
+
+    def analyzecontent(self, text_solved, optimization_params):
+        for _ in optimization_params:
+            if isinstance(_, dict):
+                _gpt_dict = _.get("gpt_dict", None)
+                if _gpt_dict is None:
+                    continue
+                return _.get("gpt_dict_origin")
+        return text_solved
 
     def _delaypreparefixrank(self, _showrawfunction, real_fix_rank):
         _showrawfunction()
@@ -664,6 +689,13 @@ class MAINUI:
         self.audioplayer.timestamp = uuid.uuid4()
         reader.read(text2, force, self.audioplayer.timestamp)
 
+    @tryprint
+    def read_text(self, text):
+        if not self.reader:
+            return
+        self.audioplayer.timestamp = uuid.uuid4()
+        self.reader.read(text, True, self.audioplayer.timestamp)
+
     def readcurrent(self, force=False, needresult=False):
         if needresult:
             text = self.ttsrepair(self.currentread, self.__usewhich())
@@ -751,7 +783,6 @@ class MAINUI:
                 "copy": copyboard,
                 "texthook": texthook,
                 "filetrans": filetrans,
-                "livecaptions": livecaptions,
             }
             if use is None:
                 use = list(
@@ -917,17 +948,16 @@ class MAINUI:
         )
 
     @threader
-    def clickwordcallback(self, word, append):
+    def clickwordcallback(self, word, append=False):
         if globalconfig["usewordorigin"] == False:
             word = word["orig"]
         else:
             word = word.get("origorig", word["orig"])
 
         if globalconfig["usecopyword"]:
-            if append:
-                winsharedutils.clipboard_set(winsharedutils.clipboard_get() + word)
-            else:
-                winsharedutils.clipboard_set(word)
+            winsharedutils.clipboard_set(
+                (winsharedutils.clipboard_get() + word) if append else word
+            )
         if globalconfig["usesearchword"]:
             self.searchwordW.search_word.emit(word, append)
 
@@ -1054,11 +1084,49 @@ class MAINUI:
         font.setPointSizeF(globalconfig["settingfontsize"])
         QApplication.instance().setFont(font)
 
+    def get_font_default(self, lang: str, issetting: bool) -> str:
+        # global font_default_used
+        # if lang in font_default_used.keys():
+        #     return font_default_used[lang]
+
+        t = "setting_font_type_default" if issetting else "font_type_default"
+        l = lang if lang in static_data[t].keys() else "default"
+
+        font_default = ""
+
+        if isinstance(static_data[t][l], list):
+            fontlist = static_data[t][l]
+        elif isinstance(static_data[t][l], dict):
+            if get_platform() == "xp":
+                target = "xp"
+            else:
+                target = "normal"
+            fontlist = static_data[t][l].get(target, [])
+        else:
+            fontlist = []
+        is_font_installed = lambda font: QFont(font).exactMatch()
+        for font in fontlist:
+            if is_font_installed(font):
+                font_default = font
+                break
+        if font_default == "":
+            font_default = QFontDatabase.systemFont(
+                QFontDatabase.SystemFont.GeneralFont
+            ).family()
+
+        # font_default_used["lang"] = font_default
+        return font_default
+
+    def set_font_default(self, lang: str, fonttype: str) -> None:
+        globalconfig[fonttype] = self.get_font_default(
+            lang, True if fonttype == "settingfonttype" else False
+        )
+
     def parsedefaultfont(self):
         for k in ["fonttype", "fonttype2", "settingfonttype"]:
             if globalconfig[k] == "":
                 l = "ja" if k == "fonttype" else getlanguse()
-                set_font_default(l, k)
+                self.set_font_default(l, k)
                 # globalconfig[k] = QFontDatabase.systemFont(
                 #     QFontDatabase.SystemFont.GeneralFont
                 # ).family()

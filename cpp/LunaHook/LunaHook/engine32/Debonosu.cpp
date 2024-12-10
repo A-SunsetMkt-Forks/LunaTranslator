@@ -3,25 +3,25 @@
 namespace
 { // unnamed
   int _type;
-  void SpecialHookDebonosuScenario(hook_stack *stack, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
+  void SpecialHookDebonosuScenario(hook_context *context, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
   {
-    DWORD retn = stack->retaddr;
+    DWORD retn = context->retaddr;
     if (*(WORD *)retn == 0xc483)
     { // add esp, $  old Debonosu game
-      hp->offset = get_stack(1);
+      hp->offset = stackoffset(1);
       _type = 1;
     }
     else
     { // new Debonosu game
-      hp->offset = get_reg(regs::eax);
+      hp->offset = regoffset(eax);
       _type = 2;
     }
     // hp->type ^= EXTERN_HOOK;
     hp->text_fun = nullptr;
     *split = FIXED_SPLIT_VALUE;
-    buffer->from_cs((char *)*(DWORD *)(stack->base + hp->offset));
+    buffer->from((char *)*(DWORD *)(context->base + hp->offset));
   }
-  void hook_after(hook_stack *s, TextBuffer buffer)
+  void embed_fun(hook_context *s, TextBuffer buffer)
   {
     static std::string ts;
     ts = buffer.viewA();
@@ -60,8 +60,8 @@ namespace
               hp.address = hook_addr;
               hp.text_fun = SpecialHookDebonosuScenario;
               // hp.type = USING_STRING;
-              hp.hook_after = hook_after;
-              hp.hook_font = F_MultiByteToWideChar | F_GetTextExtentPoint32A;
+              hp.embed_fun = embed_fun;
+              hp.embed_hook_font = F_MultiByteToWideChar | F_GetTextExtentPoint32A;
               hp.type = USING_STRING | NO_CONTEXT | USING_SPLIT | FIXING_SPLIT | EMBED_ABLE | EMBED_DYNA_SJIS; // there is only one thread
               hp.filter_fun = [](TextBuffer *buffer, HookParam *hp)
               {
@@ -77,9 +77,9 @@ namespace
     // ConsoleOutput("Unknown Debonosu engine.");
     return false;
   }
-  void SpecialHookDebonosuName(hook_stack *stack, HookParam *hp, uintptr_t *data, uintptr_t *split, size_t *len)
+  void SpecialHookDebonosuName(hook_context *context, HookParam *hp, uintptr_t *data, uintptr_t *split, size_t *len)
   {
-    DWORD text = stack->ecx;
+    DWORD text = context->ecx;
     if (!text)
       return;
     *data = text;
@@ -115,7 +115,7 @@ namespace
     HookParam hp;
     hp.address = addr;
     // hp.text_fun = SpecialHookDebonosuName;
-    hp.offset = get_reg(regs::ecx);
+    hp.offset = regoffset(ecx);
     // hp.type = USING_STRING;
     hp.type = USING_STRING | NO_CONTEXT | USING_SPLIT | EMBED_ABLE | EMBED_AFTER_NEW; //|FIXING_SPLIT; // there is only one thread
     ConsoleOutput("INSERT DebonosuName");
@@ -181,16 +181,18 @@ namespace
       HookParam hp;
       hp.address = addr + 6;
       hp.type = USING_STRING | NO_CONTEXT;
-      hp.offset = get_reg(regs::eax);
-      hp.filter_fun = [](TextBuffer *buffer, HookParam *)
+      hp.offset = regoffset(eax);
+      hp.filter_fun = [](TextBuffer *buffer, HookParam *hp)
       {
         auto text = reinterpret_cast<LPSTR>(buffer->buff);
         if (all_ascii(text, buffer->size))
           return buffer->clear();
-
         std::string str = buffer->strA();
-        std::regex reg1("\\{(.*?)/(.*?)\\}");
-        std::string result1 = std::regex_replace(str, reg1, "$1");
+        if (WideStringToString(StringToWideString(str)) == str)
+          hp->type |= CODEC_UTF8;
+        else
+          hp->type &= ~CODEC_UTF8;
+        std::string result1 = std::regex_replace(str, std::regex("\\{(.*?)/(.*?)\\}"), "$1");
         buffer->from(result1);
       };
       succ |= NewHook(hp, "debonosu");

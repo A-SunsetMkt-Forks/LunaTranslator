@@ -455,31 +455,6 @@ std::vector<DWORD> findrelativecall(const BYTE *pattern, int length, DWORD calla
   }
   return save;
 }
-std::vector<DWORD> findxref_reverse_checkcallop(DWORD addr, DWORD from, DWORD to, BYTE op)
-{
-  // op可以为E8 call E9 jump
-  // 上面的版本其实就应该checkcallop的，之前忘了，但不敢乱改破坏之前的了，不然还要重新测试。
-  std::vector<DWORD> res;
-  if (addr == 0)
-    return res;
-  DWORD now = to;
-  while (now > from)
-  {
-    DWORD calladdr = now - 5;
-    if (IsBadReadPtr((LPVOID)(calladdr + 1), 4) == 0)
-    {
-      DWORD relative = *(DWORD *)(calladdr + 1);
-      if (now + relative == addr)
-      {
-        if (*(BYTE *)calladdr == op)
-          res.push_back(calladdr);
-      }
-    }
-
-    now -= 1;
-  }
-  return res;
-}
 uintptr_t finddllfunctioncall(uintptr_t funcptr, uintptr_t start, uintptr_t end, WORD sig, bool reverse)
 {
   auto entry = Util::FindImportEntry(start, funcptr);
@@ -566,6 +541,32 @@ uintptr_t reverseFindBytes(const BYTE *pattern, int length, uintptr_t start, uin
     // }
   }
   return 0;
+}
+
+std::vector<uintptr_t> findxref_reverse_checkcallop(uintptr_t addr, uintptr_t from, uintptr_t to, BYTE op)
+{
+  // op可以为E8 call E9 jump
+  // 上面的版本其实就应该checkcallop的，之前忘了，但不敢乱改破坏之前的了，不然还要重新测试。
+  std::vector<uintptr_t> res;
+  if (addr == 0)
+    return res;
+  uintptr_t now = to;
+  while (now > from)
+  {
+    uintptr_t calladdr = now - 5;
+    if (IsBadReadPtr((LPVOID)(calladdr + 1), 4) == 0)
+    {
+      int relative = *(int *)(calladdr + 1);
+      if (now + relative == addr)
+      {
+        if (*(BYTE *)calladdr == op)
+          res.push_back(calladdr);
+      }
+    }
+
+    now -= 1;
+  }
+  return res;
 }
 std::vector<uintptr_t> findxref_reverse(uintptr_t addr, uintptr_t from, uintptr_t to)
 {
@@ -735,27 +736,27 @@ bool Engine::isAddressWritable(const wchar_t *p, size_t count)
 
 BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam)
 {
-  std::vector<WindowInfo> *windowList = reinterpret_cast<std::vector<WindowInfo> *>(lParam);
+  auto *hwnds = reinterpret_cast<std::vector<HWND> *>(lParam);
   DWORD processId;
-  GetWindowThreadProcessId(hwnd, &processId);
-  if (processId == GetCurrentProcessId())
-  {
-    auto length = GetWindowTextLengthW(hwnd);
-    auto title = std::vector<WCHAR>(length + 1);
-    GetWindowTextW(hwnd, title.data(), title.size());
-
-    WindowInfo windowInfo;
-    windowInfo.handle = hwnd;
-    windowInfo.title = title.data();
-
-    windowList->push_back(windowInfo);
-  }
+  if (GetWindowThreadProcessId(hwnd, &processId) && (processId == GetCurrentProcessId()))
+    hwnds->push_back(hwnd);
   return TRUE;
 }
 std::vector<WindowInfo> get_proc_windows()
 {
+  std::vector<HWND> hwnds;
   std::vector<WindowInfo> windows;
-  EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(&windows));
+  EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(&hwnds));
+  for (auto hwnd : hwnds)
+  {
+    WindowInfo windowInfo;
+    windowInfo.handle = hwnd;
+    auto length = GetWindowTextLengthW(hwnd);
+    auto title = std::vector<WCHAR>(length + 1);
+    GetWindowTextW(hwnd, title.data(), title.size());
+    windowInfo.title = title.data();
+    windows.emplace_back(windowInfo);
+  }
   return windows;
 }
 
