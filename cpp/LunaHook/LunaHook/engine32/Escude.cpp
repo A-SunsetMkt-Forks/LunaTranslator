@@ -169,9 +169,9 @@ namespace
           return p + 1;
     return text;
   }
-  void SpecialHookEscude(hook_stack *stack, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
+  void SpecialHookEscude(hook_context *context, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
   {
-    DWORD arg1 = stack->stack[1];
+    DWORD arg1 = context->stack[1];
     if (!arg1 || (LONG)arg1 == -1 || ::IsBadWritePtr((LPVOID)arg1, 4)) // this is indispensable
       return;
     LPCSTR text = (LPCSTR) * (DWORD *)(arg1 + 0x20);
@@ -181,7 +181,7 @@ namespace
     if (!text)
       return;
     *split = *(DWORD *)arg1;
-    buffer->from_cs(text);
+    buffer->from(text);
   }
   struct HookArgument
   {
@@ -206,7 +206,7 @@ namespace
     }
   };
   LPCSTR trimmedText;
-  void hook_before(hook_stack *s, HookParam *hp, TextBuffer *buffer, uintptr_t *role)
+  void hook_before(hook_context *s, HookParam *hp, TextBuffer *buffer, uintptr_t *role)
   {
 
     auto arg = (HookArgument *)s->stack[1];
@@ -214,9 +214,9 @@ namespace
       return;
     trimmedText = _escudeltrim(arg->text);
     *role = arg->role();
-    buffer->from_cs(trimmedText);
+    buffer->from(trimmedText);
   }
-  void hook_after(hook_stack *s, TextBuffer buffer)
+  void embed_fun(hook_context *s, TextBuffer buffer)
   {
     static std::string data_;
     data_ = buffer.strA();
@@ -249,12 +249,12 @@ bool InsertEscudeHook()
   HookParam hp;
   hp.address = addr;
   hp.text_fun = hook_before;
-  hp.hook_after = hook_after;
-  hp.hook_font = F_TextOutA | F_GetTextExtentPoint32A;
+  hp.embed_fun = embed_fun;
+  hp.embed_hook_font = F_TextOutA | F_GetTextExtentPoint32A;
   hp.text_fun = SpecialHookEscude;
   hp.filter_fun = EscudeFilter;
   hp.type = USING_STRING | USING_SPLIT | NO_CONTEXT | EMBED_ABLE | EMBED_DYNA_SJIS; // NO_CONTEXT as this function is only called by one caller anyway
-  hp.newlineseperator = L"<r>";
+  hp.lineSeparator = L"<r>";
   ConsoleOutput("INSERT Escude");
 
   return NewHook(hp, "Escude");

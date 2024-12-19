@@ -23,7 +23,9 @@
 		"args": {
 			"usewhich": 0,
 			"github": "https://github.com/OwO-Network/DeepLX",
-			"api": "http://127.0.0.1:1188/translate"
+			"api": "http://127.0.0.1:1188/translate",
+			"chromepath": "",
+			"debugport": 9222
 		},
 		"argstype": {
 			"github": {
@@ -39,14 +41,134 @@
 				"refcombo_i": 1,
 				"type": "textlist"
 			},
+			"chromepath": {
+				"name": "Chromium_路径",
+				"refcombo": "usewhich",
+				"refcombo_i": 2,
+				"type": "file",
+				"dir": false
+			},
+			"debugport": {
+				"name": "端口号",
+				"refcombo": "usewhich",
+				"refcombo_i": 2,
+				"type": "intspin",
+				"min": 0,
+				"max": 1000000,
+				"step": 1
+			},
 			"usewhich": {
 				"rank": 0,
 				"type": "combo",
 				"name": "类型",
 				"list": [
 					"DeepL",
-					"DeepLX"
+					"DeepLX",
+					"CDP"
 				]
+			}
+		}
+	},
+	"cdp_chatgpt": {
+		"args": {
+			"usewhich": 0,
+			"chromepath": "",
+			"debugport": 9222,
+            "target_url": "https://duckduckgo.com/?t=h_&q=hi&ia=chat",
+			"request_method": 0,
+            "checkneturlfunction": "url.includes(\"v1/chat\")",
+            "extracttextfunction": "thistext += chunk.message?chunk.message:\"\"",
+            "textarea_selector": "textarea",
+            "button_selector": "button[type=\"submit\"]",
+			"S": "",
+			"S2": "",
+			"usingstream": true,
+			"use_custom_prompt": false,
+			"custom_prompt": ""
+		},
+		"argstype": {
+			"chromepath": {
+				"rank": -99,
+				"name": "Chromium_路径",
+				"type": "file",
+				"dir": false
+			},
+			"debugport": {
+				"rank": -98,
+				"name": "端口号",
+				"type": "intspin",
+				"min": 0,
+				"max": 1000000,
+				"step": 1
+			},
+			"usewhich": {
+				"rank": -100,
+				"type": "combo",
+				"name": "类型",
+				"list": [
+					"chatgpt",
+					"mirror"
+				]
+			},
+			"S2": {
+				"rank": -11,
+				"type": "split"
+			},
+			"target_url": {
+				"refcombo": "usewhich",
+				"refcombo_i": 1,
+				"rank": -10
+			},
+			"S": {
+				"refcombo": "usewhich",
+				"refcombo_i": 1,
+				"rank": 0,
+				"type": "split"
+			},
+			"textarea_selector": {
+				"refcombo": "usewhich",
+				"refcombo_i": 1,
+				"rank": -6,
+				"name": "CSS selector for textarea"
+			},
+			"button_selector": {
+				"refcombo": "usewhich",
+				"refcombo_i": 1,
+				"rank": -5,
+				"name": "CSS selector for button"
+			},
+			"extracttextfunction": {
+				"refcombo": "usewhich",
+				"refcombo_i": 1,
+				"rank": -7,
+				"name": "Function2 (extract text in stream chunk)"
+			},
+			"checkneturlfunction": {
+				"refcombo": "usewhich",
+				"refcombo_i": 1,
+				"rank": -8,
+				"name": "Function1 (check if url is backend url)"
+			},
+			"request_method": {
+				"refcombo": "usewhich",
+				"refcombo_i": 1,
+				"rank": -9,
+				"type": "combo",
+				"list": [
+					"fetch",
+					"xhr"
+				]
+			},
+			"usingstream": {
+				"rank": 1,
+				"name": "流式输出",
+				"type": "switch"
+			},
+			"custom_prompt": {
+				"rank": 2,
+				"name": "自定义_promt",
+				"type": "multiline",
+				"refswitch": "use_custom_prompt"
 			}
 		}
 	},
@@ -87,20 +209,6 @@
 					"百度翻译开放平台",
 					"百度智能云"
 				]
-			}
-		}
-	},
-	"feishu": {
-		"args": {
-			"app_id": "",
-			"app_secret": ""
-		},
-		"argstype": {
-			"app_id": {
-				"type": "textlist"
-			},
-			"app_secret": {
-				"type": "textlist"
 			}
 		}
 	},
@@ -277,95 +385,6 @@
 			}
 		}
 	},
-	"txhunyuan": {
-		"args": {
-			"secret_id": "",
-			"secret_key": "",
-			"Temperature": 0.3,
-			"top_p": 0.3,
-			"model": "hunyuan-lite",
-			"context_num": 0,
-			"use_user_prompt": false,
-			"user_prompt": "",
-			"user_user_prompt": "{sentence}",
-			"use_user_user_prompt": false,
-			"usingstream": true,
-			"other_args": "{}",
-			"use_other_args": false,
-			"s": ""
-		},
-		"argstype": {
-			"other_args": {
-				"type": "multiline",
-				"refswitch": "use_other_args",
-				"name": "其他参数"
-			},
-			"s": {
-				"type": "split",
-				"rank": 2.5
-			},
-			"secret_id": {
-				"rank": 0,
-				"name": "SecretId",
-				"type": "textlist"
-			},
-			"secret_key": {
-				"rank": 1,
-				"name": "SecretKey",
-				"type": "textlist"
-			},
-			"model": {
-				"rank": 2,
-				"type": "lineedit_or_combo",
-				"list": [
-					"hunyuan-lite",
-					"hunyuan-turbo",
-					"hunyuan-pro",
-					"hunyuan-standard",
-					"hunyuan-standard-256k",
-					"hunyuan-role",
-					"hunyuan-functioncall",
-					"hunyuan-code"
-				]
-			},
-			"top_p": {
-				"type": "spin",
-				"min": 0,
-				"max": 1,
-				"step": 0.01
-			},
-			"usingstream": {
-				"name": "流式输出",
-				"type": "switch",
-				"rank": 3
-			},
-			"user_prompt": {
-				"name": "自定义_system prompt",
-				"type": "multiline",
-				"refswitch": "use_user_prompt",
-				"rank": 5
-			},
-			"user_user_prompt": {
-				"name": "自定义_user message",
-				"refswitch": "use_user_user_prompt",
-				"rank": 5.1
-			},
-			"context_num": {
-				"name": "附带上下文个数",
-				"type": "intspin",
-				"min": 0,
-				"max": 99999,
-				"step": 1,
-				"rank": 4.9
-			},
-			"Temperature": {
-				"type": "spin",
-				"min": 0,
-				"max": 1,
-				"step": 0.1
-			}
-		}
-	},
 	"claude": {
 		"args": {
 			"BASE_URL": "https://api.anthropic.com",
@@ -379,8 +398,6 @@
 			"流式输出": true,
 			"user_user_prompt": "{sentence}",
 			"use_user_user_prompt": false,
-			"other_args": "{}",
-			"use_other_args": false,
 			"s": "",
 			"s2": "",
 			"prefill": "",
@@ -393,11 +410,6 @@
 			},
 			"prefill_use": {
 				"type": "switch"
-			},
-			"other_args": {
-				"type": "multiline",
-				"refswitch": "use_other_args",
-				"name": "其他参数"
 			},
 			"user_user_prompt": {
 				"name": "自定义_user message",
@@ -463,7 +475,7 @@
 			"Temperature": {
 				"type": "spin",
 				"min": 0,
-				"max": 1,
+				"max": 2,
 				"step": 0.1
 			}
 		}
@@ -542,7 +554,7 @@
 			},
 			"frequency_penalty": {
 				"type": "spin",
-				"min": 0,
+				"min": -2,
 				"max": 2,
 				"step": 0.05
 			},
@@ -572,111 +584,7 @@
 			"Temperature": {
 				"type": "spin",
 				"min": 0,
-				"max": 1,
-				"step": 0.1
-			}
-		}
-	},
-	"baiduqianfan": {
-		"args": {
-			"model": "ernie-4.0-8k",
-			"context_num": 0,
-			"API_KEY": "",
-			"SECRET_KEY": "",
-			"use_user_prompt": false,
-			"user_prompt": "",
-			"usingstream": true,
-			"Temperature": 0.3,
-			"top_p": 0.3,
-			"max_tokens": 1024,
-			"frequency_penalty": 0,
-			"user_user_prompt": "{sentence}",
-			"use_user_user_prompt": false,
-			"other_args": "{}",
-			"use_other_args": false,
-			"s": ""
-		},
-		"argstype": {
-			"other_args": {
-				"type": "multiline",
-				"refswitch": "use_other_args",
-				"name": "其他参数"
-			},
-			"user_user_prompt": {
-				"name": "自定义_user message",
-				"refswitch": "use_user_user_prompt",
-				"rank": 5.1
-			},
-			"s": {
-				"type": "split",
-				"rank": 2.5
-			},
-			"API_KEY": {
-				"rank": 0,
-				"name": "API Key",
-				"type": "textlist"
-			},
-			"SECRET_KEY": {
-				"rank": 1,
-				"name": "Secret Key",
-				"type": "textlist"
-			},
-			"model": {
-				"rank": 2,
-				"type": "lineedit_or_combo",
-				"list": [
-					"ernie-4.0-8k",
-					"ernie-4.0-turbo-8k",
-					"ernie-3.5-128k",
-					"ernie-3.5-8k",
-					"ernie-speed-pro-128k",
-					"ernie-speed-128k",
-					"ernie-speed-8k",
-					"ernie-lite-8k",
-					"ernie-tiny-8k"
-				]
-			},
-			"top_p": {
-				"type": "spin",
-				"min": 0,
-				"max": 1,
-				"step": 0.01
-			},
-			"frequency_penalty": {
-				"type": "spin",
-				"min": 0,
 				"max": 2,
-				"step": 0.05
-			},
-			"max_tokens": {
-				"type": "intspin",
-				"min": 1,
-				"max": 1000000,
-				"step": 1
-			},
-			"user_prompt": {
-				"type": "multiline",
-				"name": "自定义_system prompt",
-				"refswitch": "use_user_prompt",
-				"rank": 5
-			},
-			"usingstream": {
-				"name": "流式输出",
-				"type": "switch",
-				"rank": 3
-			},
-			"context_num": {
-				"name": "附带上下文个数",
-				"type": "intspin",
-				"min": 0,
-				"max": 99999,
-				"step": 1,
-				"rank": 4.9
-			},
-			"Temperature": {
-				"type": "spin",
-				"min": 0,
-				"max": 1,
 				"step": 0.1
 			}
 		}
@@ -693,8 +601,6 @@
 			"流式输出": true,
 			"use_user_user_prompt": false,
 			"user_user_prompt": "{sentence}",
-			"other_args": "{}",
-			"use_other_args": false,
 			"s": "",
 			"s2": "",
 			"prefill": "",
@@ -711,11 +617,6 @@
 			"s2": {
 				"type": "split",
 				"rank": 5.12
-			},
-			"other_args": {
-				"type": "multiline",
-				"refswitch": "use_other_args",
-				"name": "其他参数"
 			},
 			"user_user_prompt": {
 				"name": "自定义_user message",
@@ -760,33 +661,43 @@
 			"Temperature": {
 				"type": "spin",
 				"min": 0,
-				"max": 1,
+				"max": 2,
 				"step": 0.1
 			}
 		}
 	},
 	"jb7": {
 		"args": {
-			"path": ""
+			"path": "",
+            "下载": "{main_server}/Resource/translate/JBeijing7.zip"
 		},
 		"argstype": {
 			"path": {
 				"type": "file",
 				"dir": true,
 				"name": "路径"
-			}
+			},
+            "下载": {
+                "type": "label",
+                "islink": true
+            }
 		}
 	},
 	"kingsoft": {
 		"args": {
-			"path": ""
+			"path": "",
+			"下载": "{main_server}/Resource/translate/FastAIT09_Setup.25269.4101.zip"
 		},
 		"argstype": {
 			"path": {
 				"name": "路径",
 				"type": "file",
 				"dir": true
-			}
+			},
+            "下载": {
+                "type": "label",
+                "islink": true
+            }
 		}
 	},
 	"eztrans": {
@@ -804,19 +715,25 @@
 	},
 	"dreye": {
 		"args": {
-			"path": ""
+			"path": "",
+            "下载": "{main_server}/Resource/translate/DR.eye.zip"
 		},
 		"argstype": {
 			"path": {
 				"name": "路径",
 				"type": "file",
 				"dir": true
-			}
+			},
+            "下载": {
+                "type": "label",
+                "islink": true
+            }
 		}
 	},
 	"rengong": {
 		"args": {
-			"jsonfile": []
+			"jsonfile": [],
+			"skip_other_on_success": false
 		},
 		"argstype": {
 			"jsonfile": {
@@ -825,6 +742,10 @@
 				"dir": false,
 				"filter": "*.json",
 				"multi": true
+			},
+			"skip_other_on_success": {
+				"type": "switch",
+				"name": "成功时跳过其他翻译"
 			}
 		}
 	},
@@ -904,42 +825,6 @@
 			}
 		}
 	},
-	"dev_duckduckgo": {
-		"args": {
-			"usingstream": true,
-			"use_custom_prompt": false,
-			"custom_prompt": ""
-		},
-		"argstype": {
-			"usingstream": {
-				"name": "流式输出",
-				"type": "switch"
-			},
-			"custom_prompt": {
-				"name": "自定义_promt",
-				"type": "multiline",
-				"refswitch": "use_custom_prompt"
-			}
-		}
-	},
-	"dev_theb": {
-		"args": {
-			"usingstream": true,
-			"use_custom_prompt": false,
-			"custom_prompt": ""
-		},
-		"argstype": {
-			"usingstream": {
-				"name": "流式输出",
-				"type": "switch"
-			},
-			"custom_prompt": {
-				"name": "自定义_promt",
-				"type": "multiline",
-				"refswitch": "use_custom_prompt"
-			}
-		}
-	},
 	"dev_chatgpt_mirror": {
 		"args": {
 			"target_url": "https://chatgpt.com/",
@@ -998,78 +883,6 @@
 			}
 		}
 	},
-	"dev_moonshot": {
-		"args": {
-			"usingstream": true,
-			"use_custom_prompt": false,
-			"custom_prompt": ""
-		},
-		"argstype": {
-			"usingstream": {
-				"name": "流式输出",
-				"type": "switch"
-			},
-			"custom_prompt": {
-				"name": "自定义_promt",
-				"type": "multiline",
-				"refswitch": "use_custom_prompt"
-			}
-		}
-	},
-	"dev_qwen": {
-		"args": {
-			"usingstream": true,
-			"use_custom_prompt": false,
-			"custom_prompt": ""
-		},
-		"argstype": {
-			"usingstream": {
-				"name": "流式输出",
-				"type": "switch"
-			},
-			"custom_prompt": {
-				"name": "自定义_promt",
-				"type": "multiline",
-				"refswitch": "use_custom_prompt"
-			}
-		}
-	},
-	"dev_chatglm": {
-		"args": {
-			"usingstream": true,
-			"use_custom_prompt": false,
-			"custom_prompt": ""
-		},
-		"argstype": {
-			"usingstream": {
-				"name": "流式输出",
-				"type": "switch"
-			},
-			"custom_prompt": {
-				"name": "自定义_promt",
-				"type": "multiline",
-				"refswitch": "use_custom_prompt"
-			}
-		}
-	},
-	"dev_deepseek": {
-		"args": {
-			"usingstream": true,
-			"use_custom_prompt": false,
-			"custom_prompt": ""
-		},
-		"argstype": {
-			"usingstream": {
-				"name": "流式输出",
-				"type": "switch"
-			},
-			"custom_prompt": {
-				"name": "自定义_promt",
-				"type": "multiline",
-				"refswitch": "use_custom_prompt"
-			}
-		}
-	},
 	"gemini": {
 		"args": {
 			"SECRET_KEY": "",
@@ -1082,8 +895,6 @@
 			"custom_prompt": "",
 			"user_user_prompt": "{sentence}",
 			"use_user_user_prompt": false,
-			"other_args": "{}",
-			"use_other_args": false,
 			"s": "",
 			"s2": "",
 			"usingstream": true,
@@ -1097,11 +908,6 @@
 			},
 			"prefill_use": {
 				"type": "switch"
-			},
-			"other_args": {
-				"type": "multiline",
-				"refswitch": "use_other_args",
-				"name": "其他参数"
 			},
 			"BASE_URL": {
 				"name": "API接口地址",
@@ -1156,61 +962,7 @@
 			"Temperature": {
 				"type": "spin",
 				"min": 0,
-				"max": 1,
-				"step": 0.1
-			}
-		}
-	},
-	"ort_sp": {
-		"args": {
-			"path": "",
-			"最大生成长度": 128,
-			"最小生成长度": 1,
-			"柱搜索数": 8,
-			"序列数": 1,
-			"过长惩罚": 1.4,
-			"重复惩罚": 1.7
-		},
-		"argstype": {
-			"path": {
-				"name": "路径",
-				"type": "file",
-				"dir": true
-			},
-			"序列数": {
-				"type": "intspin",
-				"min": 0,
-				"max": 10000,
-				"step": 1
-			},
-			"最大生成长度": {
-				"type": "intspin",
-				"min": 0,
-				"max": 10000,
-				"step": 1
-			},
-			"最小生成长度": {
-				"type": "intspin",
-				"min": 0,
-				"max": 10000,
-				"step": 1
-			},
-			"柱搜索数": {
-				"type": "intspin",
-				"min": 0,
-				"max": 10000,
-				"step": 1
-			},
-			"过长惩罚": {
-				"type": "spin",
-				"min": 0,
-				"max": 10000,
-				"step": 0.1
-			},
-			"重复惩罚": {
-				"type": "spin",
-				"min": 0,
-				"max": 10000,
+				"max": 2,
 				"step": 0.1
 			}
 		}
@@ -1300,7 +1052,7 @@
 			},
 			"frequency_penalty": {
 				"type": "spin",
-				"min": 0,
+				"min": -2,
 				"max": 2,
 				"step": 0.05
 			}
@@ -1380,7 +1132,7 @@
 			},
 			"frequency_penalty": {
 				"type": "spin",
-				"min": 0,
+				"min": -2,
 				"max": 2,
 				"step": 0.05
 			},
@@ -1410,7 +1162,7 @@
 			"Temperature": {
 				"type": "spin",
 				"min": 0,
-				"max": 1,
+				"max": 2,
 				"step": 0.1
 			}
 		}

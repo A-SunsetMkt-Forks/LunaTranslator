@@ -32,10 +32,10 @@ namespace
     {
       HookParam hp;
       hp.address = already.back();
-      hp.offset = get_reg(regs::rdx);
+      hp.offset = regoffset(rdx);
 
       hp.type = EMBED_ABLE | USING_STRING |  EMBED_AFTER_NEW | EMBED_DYNA_SJIS;
-      hp.hook_font = F_GetGlyphOutlineA;
+      hp.embed_hook_font = F_GetGlyphOutlineA;
       res |= NewHook(hp, "EmbedCMVS");
     }
     return res;
@@ -51,7 +51,7 @@ namespace
 
     HookParam hp;
     hp.address = addr + 4;
-    hp.offset = get_reg(regs::r8);
+    hp.offset = regoffset(r8);
     hp.type = CODEC_ANSI_BE;
 
     return NewHook(hp, "CMVS");

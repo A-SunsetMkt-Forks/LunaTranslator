@@ -29,15 +29,14 @@ mylinks = {
     "ocr_models": {
         "ja.zip": "https://github.com/test123456654321/RESOURCES/releases/download/ocr_models/ja.zip",
     },
-    "mecab_xp.zip": "https://github.com/HIllya51/RESOURCES/releases/download/common/mecab_xp.zip",
-    "mecab.zip": "https://github.com/HIllya51/RESOURCES/releases/download/common/mecab.zip",
-    "magpie.zip": "https://github.com/HIllya51/RESOURCES/releases/download/common/magpie.zip",
-    "themes.zip": "https://github.com/HIllya51/RESOURCES/releases/download/common/themes.zip",
+    "mecab_xp.zip": "https://github.com/HIllya51/mecab/releases/download/common/mecab_xp.zip",
+    "mecab.zip": "https://github.com/HIllya51/mecab/releases/download/common/mecab.zip",
+    "magpie.zip": "https://github.com/HIllya51/Magpie_CLI/releases/download/common/magpie.zip",
 }
 
 
-pluginDirs = ["DLL32", "DLL64", "Locale_Remulator", "Magpie", "NTLEAS"]
-pluginDirs_1 = ["DLL32", "DLL64", "NTLEAS"]
+pluginDirs = ["DLL32", "DLL64", "Magpie"]
+pluginDirs_1 = ["DLL32", "DLL64"]
 
 vcltlFile = "https://github.com/Chuyu-Team/VC-LTL5/releases/download/v5.0.9/VC-LTL-5.0.9-Binary.7z"
 
@@ -84,24 +83,6 @@ def downloadBrotli():
     shutil.move("brotli64/brotlidec.dll", f"{rootDir}/files/plugins/DLL64")
 
 
-def downloadlr():
-
-    os.chdir(rootDir + "\\temp")
-    subprocess.run(f"curl -LO {LocaleRe}")
-    subprocess.run(f"7z x {LocaleRe.split('/')[-1]} -oLR")
-    os.makedirs(
-        f"{rootDir}/files/plugins/Locale_Remulator",
-        exist_ok=True,
-    )
-    for _dir, _, _fs in os.walk("LR"):
-        for f in _fs:
-            if f in ["LRHookx64.dll", "LRHookx32.dll"]:
-                shutil.move(
-                    os.path.join(_dir, f),
-                    f"{rootDir}/files/plugins/Locale_Remulator",
-                )
-
-
 def move_directory_contents(source_dir, destination_dir):
     contents = os.listdir(source_dir)
 
@@ -123,11 +104,14 @@ def downloadmecab():
     subprocess.run(f"curl -LO {mylinks['mecab.zip']}")
     subprocess.run(f"7z x mecab.zip -oALL")
     move_directory_contents("ALL/ALL", f"{rootDir}/files/plugins")
+
+
 def downloadmecabxp():
     os.chdir(rootDir + "\\temp")
     subprocess.run(f"curl -LO {mylinks['mecab_xp.zip']}")
     subprocess.run(f"7z x mecab_xp.zip -oALL")
     move_directory_contents("ALL/ALL", f"{rootDir}/files/plugins")
+
 
 def downloadmapie():
     os.chdir(rootDir + "\\temp")
@@ -136,32 +120,71 @@ def downloadmapie():
     move_directory_contents("ALL/ALL", f"{rootDir}/files/plugins")
 
 
+def downloadlr():
+
+    os.chdir(rootDir + "\\temp")
+    subprocess.run(f"curl -LO {LocaleRe}")
+    base = LocaleRe.split("/")[-1]
+    fn = os.path.splitext(base)[0]
+    subprocess.run(f"7z x {base}")
+    os.makedirs(
+        rf"{rootDir}\files\plugins\Locale\Locale_Remulator",
+        exist_ok=True,
+    )
+
+    for f in [
+        "LRHookx64.dll",
+        "LRHookx32.dll",
+        # "LRConfig.xml",
+        "LRProc.exe",
+        "LRSubMenus.dll",
+    ]:
+        shutil.move(
+            os.path.join(fn, f),
+            rf"{rootDir}\files\plugins\Locale\Locale_Remulator",
+        )
+
+
 def downloadLocaleEmulator():
     os.chdir(rootDir + "\\temp")
     subprocess.run(f"curl -LO {localeEmulatorFile}")
     subprocess.run(f"7z x {localeEmulatorFile.split('/')[-1]} -oLocaleEmulator")
-    shutil.move(
-        "LocaleEmulator/LoaderDll.dll",
-        f"{rootDir}/files/plugins/LoaderDll.dll",
+
+    os.makedirs(
+        rf"{rootDir}\files\plugins\Locale\Locale.Emulator",
+        exist_ok=True,
     )
-    shutil.move(
-        "LocaleEmulator/LocaleEmulator.dll",
-        f"{rootDir}/files/plugins/LocaleEmulator.dll",
-    )
+    p = subprocess.Popen("LocaleEmulator/LEInstaller.exe")
+    while 1:
+        if os.path.exists("LocaleEmulator/LECommonLibrary.dll"):
+            break
+        time.sleep(0.1)
+    p.kill()
+
+    for f in [
+        "LoaderDll.dll",
+        "LocaleEmulator.dll",
+        "LEProc.exe",
+        # "LEConfig.xml",
+        "LECommonLibrary.dll",
+    ]:
+        shutil.move(
+            os.path.join("LocaleEmulator", f),
+            rf"{rootDir}\files\plugins\Locale\Locale.Emulator",
+        )
 
 
 def downloadNtlea():
     os.chdir(rootDir + "\\temp")
     subprocess.run(f"curl -LO {ntleaFile}")
     subprocess.run(f"7z x {ntleaFile.split('/')[-1]} -ontlea")
-    shutil.move(
-        "ntlea/x86/ntleai.dll",
-        f"{rootDir}/files/plugins/NTLEAS/ntleai.dll",
+
+    os.makedirs(
+        rf"{rootDir}\files\plugins\Locale\ntleas046_x64",
+        exist_ok=True,
     )
-    shutil.move(
-        "ntlea/x64/ntleak.dll",
-        f"{rootDir}/files/plugins/NTLEAS/ntleak.dll",
-    )
+    shutil.copytree("ntlea/x86", rf"{rootDir}\files\plugins\Locale\ntleas046_x64\x86")
+    shutil.copytree("ntlea/x64", rf"{rootDir}\files\plugins\Locale\ntleas046_x64\x64")
 
 
 def downloadCurl():
@@ -184,9 +207,9 @@ def downloadCurl():
 
 def downloadOCRModel():
     os.chdir(rootDir + "\\files")
-    if not os.path.exists("ocr"):
-        os.mkdir("ocr")
-    os.chdir("ocr")
+    if not os.path.exists("ocrmodel"):
+        os.mkdir("ocrmodel")
+    os.chdir("ocrmodel")
     subprocess.run(f"curl -LO {mylinks['ocr_models']['ja.zip']}")
     subprocess.run(f"7z x ja.zip")
     os.remove(f"ja.zip")
@@ -346,7 +369,6 @@ if __name__ == "__main__":
         shutil.copy("../builds/_x86/LunaOCR32.dll", "../../py/files/plugins/DLL32")
         os.makedirs("../../py/files/plugins/DLL64", exist_ok=True)
         shutil.copy("../builds/_x64/shareddllproxy64.exe", "../../py/files/plugins")
-        shutil.copy("../builds/_x64/hookmagpie.dll", "../../py/files/plugins")
         shutil.copy("../builds/_x64/winrtutils64.dll", "../../py/files/plugins/DLL64")
         shutil.copy(
             "../builds/_x64/winsharedutils64.dll", "../../py/files/plugins/DLL64"

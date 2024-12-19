@@ -106,14 +106,14 @@ uintptr_t getasbaddr(const HookParam &hp)
 			if (function)
 				address += (uint64_t)function;
 			else
-				return ConsoleOutput(FUNC_MISSING), 0;
+				return ConsoleOutput(TR[FUNC_MISSING]), 0;
 		}
 		else
 		{
 			if (HMODULE moduleBase = GetModuleHandleW(hp.module))
 				address += (uint64_t)moduleBase;
 			else
-				return ConsoleOutput(MODULE_MISSING), 0;
+				return ConsoleOutput(TR[MODULE_MISSING]), 0;
 		}
 	}
 	return address;
@@ -126,7 +126,7 @@ bool TextHook::Insert(HookParam hp)
 		return false;
 
 	RemoveHook(addr, 0);
-	ConsoleOutput(INSERTING_HOOK, hp.name, addr);
+	ConsoleOutput(TR[INSERTING_HOOK], hp.name, addr);
 	local_buffer = new BYTE[PIPE_BUFFER_SIZE];
 	{
 		std::scoped_lock lock(viewMutex);
@@ -190,20 +190,25 @@ uintptr_t queryrelativeret(HookParam &hp, uintptr_t retaddr)
 	return relative;
 }
 
-uintptr_t jitgetaddr(hook_stack *stack, HookParam *hp)
+uintptr_t jitgetaddr(hook_context *context, HookParam *hp, bool offset)
 {
+	int off;
+	if (offset)
+		off = hp->offset;
+	else
+		off = hp->split;
 	switch (hp->jittype)
 	{
 #ifdef _WIN64
 	case JITTYPE::RPCS3:
-		return RPCS3::emu_arg(stack)[hp->argidx];
+		return RPCS3::emu_arg(context)[off];
 	case JITTYPE::VITA3K:
-		return VITA3K::emu_arg(stack)[hp->argidx];
+		return VITA3K::emu_arg(context)[off];
 	case JITTYPE::YUZU:
-		return YUZU::emu_arg(stack, hp->emu_addr)[hp->argidx];
+		return YUZU::emu_arg(context, hp->emu_addr)[off];
 #endif
 	case JITTYPE::PPSSPP:
-		return PPSSPP::emu_arg(stack)[hp->argidx];
+		return PPSSPP::emu_arg(context)[off];
 	default:
 		return 0;
 	}
@@ -241,24 +246,25 @@ void commonfilter(TextBuffer *buffer, HookParam *hp)
 }
 void TextHook::Send(uintptr_t lpDataBase)
 {
+	Send(hook_context::fromBase(lpDataBase));
+}
+void TextHook::Send(hook_context *context)
+{
 	auto buffer = (TextOutput_T *)local_buffer;
 	TextBuffer buff{buffer->data, 0};
 	_InterlockedIncrement((long *)&useCount);
 	__try
 	{
-		auto stack = get_hook_stack(lpDataBase);
 
 		if (auto current_trigger_fun = trigger_fun.exchange(nullptr))
-			if (!current_trigger_fun(location, stack))
+			if (!current_trigger_fun(location, context))
 				trigger_fun = current_trigger_fun;
 
 		if (hp.type & HOOK_RETURN)
 		{
 			hp.type &= ~HOOK_RETURN;
-			hp.address = stack->retaddr;
+			hp.address = context->retaddr;
 			strcat(hp.name, "_Return");
-			// 清除jit hook特征，防止手动插入
-			strcpy(hp.unityfunctioninfo, "");
 			hp.emu_addr = 0;
 			// 清除module
 			hp.type &= ~MODULE_OFFSET;
@@ -274,24 +280,24 @@ void TextHook::Send(uintptr_t lpDataBase)
 			__leave; // jichi 10/24/2014: dummy hook only for dynamic hook
 
 		uintptr_t lpSplit = 0,
-				  lpRetn = stack->retaddr,
-				  plpdatain = (lpDataBase + hp.offset),
-				  lpDataIn = *(uintptr_t *)plpdatain;
+				  lpRetn = context->retaddr,
+				  *plpdatain = (uintptr_t *)(context->base + hp.offset),
+				  lpDataIn = *plpdatain;
 
 		if (hp.jittype != JITTYPE::PC && hp.jittype != JITTYPE::UNITY)
 		{
-			lpDataIn = jitgetaddr(stack, &hp);
-			plpdatain = (uintptr_t)&lpDataIn;
+			lpDataIn = jitgetaddr(context, &hp, true);
+			plpdatain = &lpDataIn;
 		}
 		else if (hp.jittype == JITTYPE::UNITY)
 		{
-			plpdatain = (uintptr_t)argidx(stack, hp.argidx);
-			lpDataIn = *(uintptr_t *)plpdatain;
+			plpdatain = &context->argof(hp.offset);
+			lpDataIn = *plpdatain;
 		}
 
 		if (hp.text_fun)
 		{
-			hp.text_fun(stack, &hp, &buff, &lpSplit);
+			hp.text_fun(context, &hp, &buff, &lpSplit);
 		}
 		else if (hp.type & SPECIAL_JIT_STRING)
 		{
@@ -304,24 +310,27 @@ void TextHook::Send(uintptr_t lpDataBase)
 				lpSplit = FIXED_SPLIT_VALUE; // fuse all threads, and prevent floating
 			else if (hp.type & USING_SPLIT)
 			{
-				lpSplit = *(uintptr_t *)(lpDataBase + hp.split);
+				if (hp.jittype != JITTYPE::PC && hp.jittype != JITTYPE::UNITY)
+					lpSplit = jitgetaddr(context, &hp, false);
+				else
+					lpSplit = *(uintptr_t *)(context->base + hp.split);
 				if (hp.type & SPLIT_INDIRECT)
 					lpSplit = *(uintptr_t *)(lpSplit + hp.split_index);
 			}
 			if (hp.type & DATA_INDIRECT)
 			{
-				plpdatain = (lpDataIn + hp.index);
-				lpDataIn = *(uintptr_t *)plpdatain;
+				plpdatain = (uintptr_t *)(lpDataIn + hp.index);
+				lpDataIn = *plpdatain;
 			}
 			lpDataIn += hp.padding;
-			buff.size = GetLength(stack, lpDataIn);
+			buff.size = GetLength(context, lpDataIn);
 		}
 
 		if (buff.size <= 0)
 			__leave;
 		if (buff.size > TEXT_BUFFER_SIZE)
 		{
-			ConsoleOutput(InvalidLength, buff.size, hp.name);
+			ConsoleOutput(TR[InvalidLength], buff.size, hp.name);
 			buff.size = TEXT_BUFFER_SIZE;
 		}
 		if (hp.type & USING_CHAR || (!hp.text_fun && !(hp.type & USING_STRING)))
@@ -391,29 +400,33 @@ void TextHook::Send(uintptr_t lpDataBase)
 
 		if (canembed && (check_embed_able(tp)))
 		{
-			auto lpCountsave = buff.size;
+			auto size_origin = buff.size;
+			auto zeros = 1;
+			if (hp.type & CODEC_UTF16)
+				zeros = 2;
+			else if (hp.type & CODEC_UTF32)
+				zeros = 4;
 			if (waitfornotify(&buff, tp))
 			{
 				if (hp.type & EMBED_AFTER_NEW)
 				{
-					auto _ = new char[max(lpCountsave, buff.size) + 10];
+					auto size = max(size_origin, buff.size + zeros);
+					auto _ = new char[size];
 					memcpy(_, buff.buff, buff.size);
-					for (int i = buff.size; i < max(lpCountsave, buff.size) + 10; i++)
-						_[i] = 0;
+					memset(_ + buff.size, 0, size - buff.size);
 					*(uintptr_t *)plpdatain = (uintptr_t)_;
 				}
 				else if (hp.type & EMBED_AFTER_OVERWRITE)
 				{
 					memcpy((void *)lpDataIn, buff.buff, buff.size);
-					for (int i = buff.size; i < lpCountsave; i++)
-						((BYTE *)(lpDataIn))[i] = 0;
+					memset((char *)lpDataIn + buff.size, 0, max(size_origin, zeros));
 				}
-				else if (hp.hook_after)
-					hp.hook_after(stack, buff);
+				else if (hp.embed_fun)
+					hp.embed_fun(context, buff);
 				else if (hp.type & SPECIAL_JIT_STRING)
 				{
 					if (hp.jittype == JITTYPE::UNITY)
-						unity_ui_string_hook_after(argidx(stack, hp.argidx), buff);
+						unity_ui_string_embed_fun(context->argof(hp.offset), buff);
 				}
 			}
 		}
@@ -423,19 +436,17 @@ void TextHook::Send(uintptr_t lpDataBase)
 		if (!err && !(hp.type & KNOWN_UNSTABLE))
 		{
 			err = true;
-			ConsoleOutput(SEND_ERROR, hp.name);
+			ConsoleOutput(TR[SEND_ERROR], hp.name);
 		}
 	}
 
 	_InterlockedDecrement((long *)&useCount);
 }
-bool TextHook::breakpointcontext(PCONTEXT context)
+bool TextHook::breakpointcontext(PCONTEXT pcontext)
 {
-	auto stack = std::make_unique<hook_stack>();
-	context_get(stack.get(), context);
-	auto lpDataBase = stack->get_base();
-	Send(lpDataBase);
-	context_set(stack.get(), context);
+	hook_context context = hook_context::fromPCONTEXT(pcontext);
+	Send(&context);
+	context.toPCONTEXT(pcontext);
 	return true;
 }
 bool TextHook::InsertBreakPoint()
@@ -477,8 +488,8 @@ void TextHook::Read()
 	{
 		if (hp.text_fun)
 		{
-			while (WaitForSingleObject(readerEvent, 500) == WAIT_TIMEOUT)
-				hp.text_fun(0, 0, 0, 0);
+			while ((!(hp.type & HOOK_EMPTY)) && (WaitForSingleObject(readerEvent, 500) == WAIT_TIMEOUT))
+				hp.text_fun(0, &hp, 0, 0);
 		}
 		else
 		{
@@ -508,7 +519,7 @@ void TextHook::Read()
 	}
 	__except (EXCEPTION_EXECUTE_HANDLER)
 	{
-		ConsoleOutput(READ_ERROR, hp.name);
+		ConsoleOutput(TR[READ_ERROR], hp.name);
 		Clear();
 	}
 }
@@ -556,14 +567,14 @@ void TextHook::Clear()
 		delete[] local_buffer;
 }
 
-int TextHook::GetLength(hook_stack *stack, uintptr_t in)
+int TextHook::GetLength(hook_context *context, uintptr_t in)
 {
 	int len;
 	if (hp.type & USING_STRING)
 	{
 		if (hp.length_offset)
 		{
-			len = *((uintptr_t *)stack->base + hp.length_offset);
+			len = *((uintptr_t *)context->base + hp.length_offset);
 			if (len >= 0)
 			{
 				if (hp.type & CODEC_UTF16)

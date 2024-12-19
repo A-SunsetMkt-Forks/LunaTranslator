@@ -807,12 +807,18 @@ class dialog_setting_game_internal(QWidget):
 
         table = TableViewW()
 
-        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        table.setModel(model)
+        table.horizontalHeader().setSectionResizeMode(
+            2, QHeaderView.ResizeMode.ResizeToContents
+        )
+        table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.ResizeToContents
+        )
+        table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         table.setSelectionMode((QAbstractItemView.SelectionMode.SingleSelection))
         table.setWordWrap(False)
-        table.setModel(model)
 
         table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         table.customContextMenuRequested.connect(self.__privatetextproc_showmenu)
@@ -876,7 +882,7 @@ class dialog_setting_game_internal(QWidget):
         self.__textprocinternalmodel.insertRow(
             row,
             [
-                QStandardItem(postprocessconfig[_internal]["name"]),
+                QStandardItem(_TR(postprocessconfig[_internal]["name"])),
                 QStandardItem(),
                 QStandardItem(),
             ],
@@ -1012,22 +1018,17 @@ class dialog_setting_game_internal(QWidget):
         box.setLayout(settinglayout)
         formLayout.addRow(box)
         settinglayout.addRow(
-            "Win32文字绘制函数钩子",
-            getsimpleswitch(
-                savehook_new_data[gameuid],
-                "insertpchooks_GdiGdiplusD3dx",
-                callback=lambda _: (
-                    gobject.baseobject.textsource.InsertPCHooks(0) if _ else None
-                ),
-            ),
-        )
-        settinglayout.addRow(
-            "Win32字符串函数钩子",
+            "Win32通用钩子",
             getsimpleswitch(
                 savehook_new_data[gameuid],
                 "insertpchooks_string",
                 callback=lambda _: (
-                    gobject.baseobject.textsource.InsertPCHooks(1) if _ else None
+                    (
+                        gobject.baseobject.textsource.InsertPCHooks(0),
+                        gobject.baseobject.textsource.InsertPCHooks(1),
+                    )
+                    if _
+                    else None
                 ),
             ),
         )
@@ -1049,7 +1050,6 @@ class dialog_setting_game_internal(QWidget):
             "textthreaddelay",
             "maxBufferSize",
             "maxHistorySize",
-            "filter_chaos_code",
         ]:
             if k not in savehook_new_data[gameuid]["hooksetting_private"]:
                 savehook_new_data[gameuid]["hooksetting_private"][k] = globalconfig[k]
@@ -1098,13 +1098,6 @@ class dialog_setting_game_internal(QWidget):
                 savehook_new_data[gameuid]["hooksetting_private"],
                 "maxHistorySize",
                 callback=lambda x: gobject.baseobject.textsource.setsettings(),
-            ),
-        )
-        formLayout2.addRow(
-            "过滤包含乱码的文本行",
-            getsimpleswitch(
-                savehook_new_data[gameuid]["hooksetting_private"],
-                "filter_chaos_code",
             ),
         )
 

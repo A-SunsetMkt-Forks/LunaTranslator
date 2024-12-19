@@ -8,6 +8,7 @@ from myutils.config import (
     savehook_new_data,
     static_data,
     findgameuidofpath,
+    getlanguse,
 )
 from textsource.textsourcebase import basetext
 from myutils.utils import (
@@ -85,7 +86,7 @@ class SearchParam(Structure):
         ("boundaryModule", c_wchar * 120),
         ("exportModule", c_wchar * 120),
         ("text", c_wchar * 30),
-        ("jittype", c_int),
+        ("isjithook", c_bool),
     ]
 
 
@@ -94,7 +95,7 @@ ProcessEvent = CFUNCTYPE(None, DWORD)
 ThreadEvent_maybe_embed = CFUNCTYPE(None, c_wchar_p, c_char_p, ThreadParam, c_bool)
 ThreadEvent = CFUNCTYPE(None, c_wchar_p, c_char_p, ThreadParam)
 OutputCallback = CFUNCTYPE(c_bool, c_wchar_p, c_char_p, ThreadParam, c_wchar_p)
-ConsoleHandler = CFUNCTYPE(None, c_wchar_p)
+HostInfoHandler = CFUNCTYPE(None, c_int, c_wchar_p)
 HookInsertHandler = CFUNCTYPE(None, DWORD, c_uint64, c_wchar_p)
 EmbedCallback = CFUNCTYPE(None, c_wchar_p, ThreadParam)
 QueryHistoryCallback = CFUNCTYPE(None, c_wchar_p)
@@ -206,7 +207,6 @@ class texthook(basetext):
             c_void_p,
             c_void_p,
             c_void_p,
-            c_void_p,
         )
         self.Luna_Inject = LunaHost.Luna_Inject
         self.Luna_Inject.argtypes = DWORD, LPCWSTR
@@ -220,6 +220,8 @@ class texthook(basetext):
         self.Luna_RemoveHook.argtypes = DWORD, c_uint64
         self.Luna_Detach = LunaHost.Luna_Detach
         self.Luna_Detach.argtypes = (DWORD,)
+        self.Luna_SetLanguage = LunaHost.Luna_SetLanguage
+        self.Luna_SetLanguage.argtypes = (c_char_p,)
         self.Luna_FindHooks = LunaHost.Luna_FindHooks
         self.Luna_FindHooks.argtypes = (
             DWORD,
@@ -252,14 +254,15 @@ class texthook(basetext):
             ThreadEvent_maybe_embed(self.onnewhook),
             ThreadEvent(self.onremovehook),
             OutputCallback(self.handle_output),
-            ConsoleHandler(gobject.baseobject.hookselectdialog.sysmessagesignal.emit),
+            HostInfoHandler(gobject.baseobject.hookselectdialog.sysmessagesignal.emit),
             HookInsertHandler(self.newhookinsert),
             EmbedCallback(self.getembedtext),
-            ConsoleHandler(gobject.baseobject.hookselectdialog.warning.emit),
         ]
         self.keepref += procs
         ptrs = [cast(_, c_void_p).value for _ in procs]
         self.Luna_Start(*ptrs)
+        self.setsettings()
+        self.setlang()
 
     def listprocessm(self):
         cachefname = gobject.gettempdir("{}.txt".format(time.time()))
@@ -342,7 +345,9 @@ class texthook(basetext):
         self.gameuid = gameuid
         self.detachall()
         _filename, _ = os.path.splitext(os.path.basename(gamepath))
-        sqlitef = gobject.gettranslationrecorddir("{}_{}.sqlite".format(_filename, gameuid))
+        sqlitef = gobject.gettranslationrecorddir(
+            "{}_{}.sqlite".format(_filename, gameuid)
+        )
         if os.path.exists(sqlitef) == False:
             md5 = getfilemd5(gamepath)
             f2 = gobject.gettranslationrecorddir("{}_{}.sqlite".format(_filename, md5))
@@ -351,7 +356,6 @@ class texthook(basetext):
             except:
                 pass
         self.startsql(sqlitef)
-        self.setsettings()
         if autostart:
             autostarthookcode = savehook_new_data[gameuid]["hook"]
             needinserthookcode = savehook_new_data[gameuid]["needinserthookcode"]
@@ -371,6 +375,7 @@ class texthook(basetext):
         if (
             len(autostarthookcode) == 0
             and len(savehook_new_data[self.gameuid]["embedablehook"]) == 0
+            and globalconfig["autoopenselecttext"]
         ):
             gobject.baseobject.hookselectdialog.realshowhide.emit(True)
         self.injectproc(injecttimeout, pids)
@@ -396,7 +401,9 @@ class texthook(basetext):
                     injectpids.append(pid)
         if len(injectpids):
             arch = ["32", "64"][self.is64bit]
-            dll = os.path.abspath("./files/plugins/LunaHook/LunaHook{}.dll".format(arch))
+            dll = os.path.abspath(
+                "./files/plugins/LunaHook/LunaHook{}.dll".format(arch)
+            )
             injectdll(injectpids, arch, dll)
 
     @threader
@@ -440,9 +447,8 @@ class texthook(basetext):
             pass
         for hookcode in self.needinserthookcode:
             self.Luna_InsertHookCode(pid, hookcode)
-        if savehook_new_data[self.gameuid]["insertpchooks_GdiGdiplusD3dx"]:
-            self.Luna_InsertPCHooks(pid, 0)
         if savehook_new_data[self.gameuid]["insertpchooks_string"]:
+            self.Luna_InsertPCHooks(pid, 0)
             self.Luna_InsertPCHooks(pid, 1)
         gobject.baseobject.displayinfomessage(
             savehook_new_data[self.gameuid]["title"], "<msg_info_refresh>"
@@ -568,6 +574,9 @@ class texthook(basetext):
         )
         return True
 
+    def setlang(self):
+        self.Luna_SetLanguage(getlanguse().encode())
+
     def setsettings(self):
         self.Luna_Settings(
             self.config["textthreaddelay"],
@@ -605,7 +614,7 @@ class texthook(basetext):
         usestruct.maxRecords = 100000
         usestruct.codepage = self.codepage()
         usestruct.boundaryModule = os.path.basename(self.gamepath)
-        usestruct.jittype = 0
+        usestruct.isjithook = False
         return usestruct
 
     @threader
@@ -637,11 +646,7 @@ class texthook(basetext):
         for pid in self.pids.copy():
             succ = self.Luna_InsertHookCode(pid, hookcode) and succ
         if succ == False:
-            getQMessageBox(
-                gobject.baseobject.hookselectdialog,
-                "Error",
-                "Invalie Hook Code Format!",
-            )
+            getQMessageBox(gobject.baseobject.hookselectdialog, "错误", "特殊码无效")
 
     @threader
     def delaycollectallselectedoutput(self):
@@ -671,8 +676,6 @@ class texthook(basetext):
 
     def handle_output(self, hc, hn, tp, output):
 
-        if self.config["filter_chaos_code"] and checkchaos(output):
-            return False
         key = (hc, hn.decode("utf8"), tp)
         if key in self.selectedhook:
             if len(self.selectedhook) == 1:

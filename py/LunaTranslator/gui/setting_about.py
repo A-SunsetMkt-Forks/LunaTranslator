@@ -16,6 +16,7 @@ from gui.usefulwidget import (
     makesubtab_lazy,
     D_getsimplecombobox,
     D_getIconButton,
+    WebivewWidget,
 )
 from gui.dynalang import LLabel
 
@@ -250,7 +251,7 @@ def versionlabelmaybesettext(self, x):
 def solvelinkitems(grid, source):
     name = source["name"]
     link = source["link"]
-    grid.append([((name), 1, ""), (makehtml(link), 2, "link")])
+    grid.append([name, (makehtml(link), 2, "link")])
 
 
 def resourcegrid(self, l):
@@ -264,7 +265,7 @@ def resourcegrid(self, l):
 
             __grid = []
             for link in source["links"]:
-                solvelinkitems(__grid, link)
+                __grid.append([link["name"], (makehtml(link["link"]), 2, "link")])
             grid.append(
                 [
                     (
@@ -297,6 +298,12 @@ def createimageview(self):
 def setTab_aboutlazy(self, basel):
 
     resourcegrid(self, basel)
+
+
+def changelog(self, basel: QHBoxLayout):
+    _ = WebivewWidget(self)
+    _.navigate(dynamiclink("{main_server}/ChangeLog"))
+    basel.addWidget(_)
 
 
 def setTab_about1(self, basel):
@@ -356,15 +363,12 @@ def setTab_about1(self, basel):
 
 def setTab_about(self, basel):
     tab_widget, do = makesubtab_lazy(
-        [
-            "关于软件",
-            "其他设置",
-            "资源下载",
-        ],
+        ["关于软件", "其他设置", "资源下载", "更新记录"],
         [
             functools.partial(setTab_about1, self),
             functools.partial(setTab_update, self),
             functools.partial(setTab_aboutlazy, self),
+            functools.partial(changelog, self),
         ],
         delay=True,
     )
@@ -375,7 +379,10 @@ def setTab_about(self, basel):
 def changeUIlanguage(_):
     languageChangeEvent = QEvent(QEvent.Type.LanguageChange)
     QApplication.sendEvent(QApplication.instance(), languageChangeEvent)
-
+    try:
+        gobject.baseobject.textsource.setlang()
+    except:
+        pass
 
 def setTab_update(self, basel):
     version = winsharedutils.queryversion(getcurrexe())

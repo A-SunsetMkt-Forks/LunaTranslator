@@ -19,14 +19,14 @@ bool VALKYRIA::attach_function()
   HookParam hp;
   hp.address = addr;
   hp.type = USING_STRING;
-  hp.offset = get_stack(5);
+  hp.offset = stackoffset(5);
   hp.filter_fun = [](TextBuffer *buffer, HookParam *hp)
   {
     // 实际上是单字符
     auto str = buffer->strA();
     if (str == "\\r" || str == "\\R")
     {
-      buffer->from_cs("\n");
+      buffer->from("\n");
     }
     //   switch ( v12 )
     // {

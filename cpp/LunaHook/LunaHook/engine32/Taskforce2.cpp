@@ -154,7 +154,7 @@ bool InsertTaskforce2Hook()
 
   HookParam hp;
   hp.address = addr + addr_offset;
-  hp.offset = get_reg(regs::ecx); // text in ecx
+  hp.offset = regoffset(ecx); // text in ecx
   hp.type = USING_STRING;         // 0x41
   hp.filter_fun = all_ascii_Filter;
   // GROWL_DWORD(hp.address);
@@ -179,9 +179,9 @@ bool InsertTaskforce2XHook()
 
   HookParam hp;
   hp.address = addr;
-  hp.offset = get_reg(regs::edi);
+  hp.offset = regoffset(edi);
   hp.type = USING_STRING | USING_SPLIT; // 0x41
-  hp.split = get_reg(regs::eax);
+  hp.split = regoffset(eax);
   hp.filter_fun = all_ascii_Filter;
 
   ConsoleOutput("INSERT Taskforce2");
@@ -193,7 +193,7 @@ namespace
   {
     namespace Private
     {
-      void hookBefore(hook_stack *s, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
+      void hookBefore(hook_context *s, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
       {
 
         int capacity = s->stack[1];      // arg 2, should always be 0x1000
@@ -207,9 +207,9 @@ namespace
         {
           sig = 0
         }; // split not used
-        buffer->from_cs(text);
+        buffer->from(text);
       }
-      void hookafter(hook_stack *s, TextBuffer buffer)
+      void hookafter(hook_context *s, TextBuffer buffer)
       {
         static std::string data_;
         std::string newData = buffer.strA();
@@ -392,8 +392,8 @@ namespace
       HookParam hp;
       hp.address = addr + addr_offset;
       hp.text_fun = Private::hookBefore;
-      hp.hook_after = Private::hookafter;
-      hp.hook_font = F_GetGlyphOutlineA;
+      hp.embed_fun = Private::hookafter;
+      hp.embed_hook_font = F_GetGlyphOutlineA;
       hp.type = USING_STRING | EMBED_ABLE | EMBED_DYNA_SJIS | NO_CONTEXT;
       return NewHook(hp, "EmbedTaskforce");
     }

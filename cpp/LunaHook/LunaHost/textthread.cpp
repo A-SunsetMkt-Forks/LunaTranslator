@@ -1,6 +1,5 @@
 #include "textthread.h"
 #include "host.h"
-#include "Lang/Lang.h"
 
 // return true if repetition found (see https://github.com/Artikash/Textractor/issues/40)
 static bool RemoveRepetition(std::wstring &text)
@@ -66,7 +65,7 @@ void TextThread::Push(BYTE *data, int length)
 			buffer.push_back(L'\n');
 	}
 	else
-		Host::AddConsoleOutput(INVALID_CODEPAGE);
+		Host::AddConsoleOutput(TR[INVALID_CODEPAGE]);
 
 	UpdateFlushTime();
 
@@ -94,7 +93,7 @@ void TextThread::UpdateFlushTime(bool recursive)
 	lastPushTime = GetTickCount64();
 	if (!recursive)
 		return;
-	auto&& ths = syncThreads.Acquire().contents;
+	auto &&ths = syncThreads.Acquire().contents;
 	if (ths.find(this) == ths.end())
 		return;
 	for (auto t : ths)

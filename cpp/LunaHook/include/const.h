@@ -1,7 +1,5 @@
 #pragma once
 
-#define LUNA_VERSION {VERSION_MAJOR,VERSION_MINOR,VERSION_PATCH,VERSION_REVISION}
-
 enum
 {
   STRING = 12,
@@ -28,6 +26,7 @@ enum HostCommandType
   HOST_COMMAND_HIJACK_PROCESS,
   HOST_COMMAND_DETACH,
   HOST_COMMAND_INSERT_PC_HOOKS,
+  HOST_COMMAND_SET_LANGUAGE,
 };
 
 enum HostNotificationType
@@ -37,8 +36,12 @@ enum HostNotificationType
   HOST_NOTIFICATION_FOUND_HOOK,
   HOST_NOTIFICATION_RMVHOOK,
   HOST_NOTIFICATION_INSERTING_HOOK,
-  HOST_SETTEXTTHREADTYPE,
-  HOST_NOTIFICATION_WARNING
+};
+enum class HOSTINFO
+{
+  Console,
+  Warning,
+  EmuGameName
 };
 #define NEXT_MASK(x)            \
   DUMMY1_##x,                   \
@@ -95,6 +98,7 @@ enum HookParamType : uint64_t
 enum HookFontType : unsigned
 {
   DECLARE_VALUE(NOT_HOOK_FONT, 0),
+  NEXT_MASK(DISABLE_FONT_SWITCH),
   NEXT_MASK(F_CreateFontA),
   NEXT_MASK(F_CreateFontW),
   NEXT_MASK(F_CreateFontIndirectA),

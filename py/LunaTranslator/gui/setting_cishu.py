@@ -1,9 +1,13 @@
 import functools, os
 import gobject
 from myutils.utils import splitocrtypes
-from myutils.config import globalconfig, _TR
-from gui.inputdialog import multicolorset, autoinitdialog
-from gui.inputdialog import autoinitdialog, autoinitdialog_items
+from myutils.config import globalconfig, _TR, get_platform
+from gui.inputdialog import (
+    multicolorset,
+    autoinitdialogx,
+    autoinitdialog_items,
+    autoinitdialog,
+)
 from gui.usefulwidget import (
     yuitsu_switch,
     makescrollgrid,
@@ -17,7 +21,6 @@ from gui.usefulwidget import (
     D_getcolorbutton,
     D_getsimplecombobox,
 )
-from gui.setting_display_text import on_not_find_qweb
 from gui.showword import showdiction
 
 
@@ -85,17 +88,16 @@ def gethiragrid(self):
 
 
 def _checkmaybefailed(self, idx):
-    if idx == 2 and not gobject.testuseqwebengine():
-        self.seletengeinecombo_1.setCurrentIndex(self.seletengeinecombo_1.lastindex)
-        on_not_find_qweb(self)
-        return
     self.seletengeinecombo_1.lastindex = self.seletengeinecombo_1.currentIndex()
     auto_select_webview.switchtype()
 
 
 def _createseletengeinecombo_1(self):
 
-    webviews = ["MSHTML", "WebView2", "QWebEngine"]
+    webviews = ["MSHTML", "WebView2"]
+
+    if get_platform() == "xp":
+        webviews = ["MSHTML"]
     self.seletengeinecombo_1 = getsimplecombobox(
         webviews,
         globalconfig,
@@ -144,12 +146,14 @@ def initinternal(self, names):
             line += [
                 D_getIconButton(
                     callback=functools.partial(
-                        autoinitdialog,
+                        autoinitdialogx,
                         self,
                         globalconfig["cishu"][cishu]["args"],
                         globalconfig["cishu"][cishu]["name"],
                         800,
                         items,
+                        "cishu." + cishu,
+                        cishu,
                     ),
                     icon="fa.gear",
                 ),
@@ -164,6 +168,7 @@ def initinternal(self, names):
         i += 1
     if len(line):
         cishugrid.append(line)
+    cishugrid[-1] += [""] * (4 + 4 + 3 - len(cishugrid[-1]))
     return cishugrid
 
 
