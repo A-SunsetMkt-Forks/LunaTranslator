@@ -37,10 +37,10 @@ DWORD WINAPI Pipe(LPVOID)
 
 		*(DWORD *)buffer = GetCurrentProcessId();
 		WriteFile(hookPipe, buffer, sizeof(DWORD), &count, nullptr);
-		WORD hookversion[4] = LUNA_VERSION;
-		WriteFile(hookPipe, hookversion, sizeof(hookversion), &count, nullptr);
+		WriteFile(hookPipe, LUNA_VERSION, sizeof(LUNA_VERSION), &count, nullptr);
 
-		ConsoleOutput(PIPE_CONNECTED);
+		ReadFile(hostPipe, &curr_lang, sizeof(SUPPORT_LANG), &count, nullptr);
+		ConsoleOutput(TR[PIPE_CONNECTED]);
 		HIJACK();
 		host_connected = true;
 		while (running && ReadFile(hostPipe, buffer, PIPE_BUFFER_SIZE, &count, nullptr))
@@ -60,6 +60,12 @@ DWORD WINAPI Pipe(LPVOID)
 					PcHooks::hookGdiGdiplusD3dxFunctions();
 				else if (info.which == 1)
 					PcHooks::hookOtherPcFunctions();
+			}
+			break;
+			case HOST_COMMAND_SET_LANGUAGE:
+			{
+				auto info = *(SetLanguageCmd *)buffer;
+				curr_lang = info.lang;
 			}
 			break;
 			case HOST_COMMAND_REMOVE_HOOK:
@@ -106,21 +112,12 @@ void TextOutput(const ThreadParam &tp, const HookParam &hp, TextOutput_T *buffer
 	memcpy(&buffer->hp, &hp, sizeof(hp));
 	WriteFile(hookPipe, buffer, sizeof(TextOutput_T) + len, DUMMY, nullptr);
 }
-
-void ConsoleOutput(LPCSTR text, ...)
+void HostInfo(HOSTINFO type, LPCSTR text, ...)
 {
-	ConsoleOutputNotif buffer;
+	HostInfoNotif buffer;
 	va_list args;
 	va_start(args, text);
-	vsnprintf(buffer.message, MESSAGE_SIZE, text, args);
-	WriteFile(hookPipe, &buffer, sizeof(buffer), DUMMY, nullptr);
-}
-
-void WarningOutput(LPCSTR text, ...)
-{
-	WarningNotif buffer;
-	va_list args;
-	va_start(args, text);
+	buffer.type = type;
 	vsnprintf(buffer.message, MESSAGE_SIZE, text, args);
 	WriteFile(hookPipe, &buffer, sizeof(buffer), DUMMY, nullptr);
 }
@@ -162,7 +159,7 @@ void NotifyHookFound(HookParam hp, wchar_t *text)
 void NotifyHookRemove(uint64_t addr, LPCSTR name)
 {
 	if (name)
-		ConsoleOutput(REMOVING_HOOK, name);
+		ConsoleOutput(TR[REMOVING_HOOK], name);
 	HookRemovedNotif buffer(addr);
 	WriteFile(hookPipe, &buffer, sizeof(buffer), DUMMY, nullptr);
 }
@@ -223,6 +220,12 @@ int HookStrLen(HookParam *hp, BYTE *data)
 		return strnlen((char *)data, TEXT_BUFFER_SIZE);
 }
 static std::mutex maplock;
+void jitaddrclear()
+{
+	std::lock_guard _(maplock);
+	emuaddr2jitaddr.clear();
+	jitaddr2emuaddr.clear();
+}
 void jitaddraddr(uint64_t em_addr, uintptr_t jitaddr, JITTYPE jittype)
 {
 	std::lock_guard _(maplock);
@@ -236,7 +239,7 @@ bool NewHook_1(HookParam &hp, LPCSTR lpname)
 
 	if (++currentHook >= MAX_HOOK)
 	{
-		ConsoleOutput(TOO_MANY_HOOKS);
+		ConsoleOutput(TR[TOO_MANY_HOOKS]);
 		return false;
 	}
 	if (lpname && *lpname)
@@ -245,7 +248,7 @@ bool NewHook_1(HookParam &hp, LPCSTR lpname)
 	wcscpy_s(hp.hookcode, HOOKCODE_LEN, HookCode::Generate(hp, GetCurrentProcessId()).c_str());
 	if (!(*hooks)[currentHook].Insert(hp))
 	{
-		ConsoleOutput(InsertHookFailed, WideStringToString(hp.hookcode).c_str());
+		ConsoleOutput(TR[InsertHookFailed], WideStringToString(hp.hookcode).c_str());
 		(*hooks)[currentHook].Clear();
 		return false;
 	}
@@ -258,14 +261,15 @@ bool NewHook_1(HookParam &hp, LPCSTR lpname)
 void delayinsertadd(HookParam hp, std::string name)
 {
 	delayinserthook->insert(std::make_pair(hp.emu_addr, std::make_pair(name, hp)));
-	ConsoleOutput(INSERTING_HOOK, name.c_str(), hp.emu_addr);
+	ConsoleOutput(TR[INSERTING_HOOK], name.c_str(), hp.emu_addr);
 }
 void delayinsertNewHook(uint64_t em_address)
 {
-	if (delayinserthook->find(em_address) == delayinserthook->end())
+	auto &&_delayinserthook = delayinserthook.Acquire();
+	if (_delayinserthook->find(em_address) == _delayinserthook->end())
 		return;
-	auto h = delayinserthook->at(em_address);
-	delayinserthook->erase(em_address);
+	auto h = _delayinserthook->at(em_address);
+	_delayinserthook->erase(em_address);
 	NewHook(h.second, h.first.c_str());
 }
 bool NewHook(HookParam hp, LPCSTR name)
@@ -274,7 +278,12 @@ bool NewHook(HookParam hp, LPCSTR name)
 		return NewHook_1(hp, name);
 	if (hp.jittype == JITTYPE::UNITY)
 	{
-		auto spls = strSplit(hp.unityfunctioninfo, ":");
+		if (strcmp(hp.function, "?") == 0)
+		{
+			loop_all_methods(true);
+			return false;
+		}
+		auto spls = strSplit(hp.function, ":");
 		if (spls.size() != 5)
 		{
 			ConsoleOutput("invalid");
@@ -336,71 +345,4 @@ std::string LoadResData(LPCWSTR pszResID, LPCWSTR _type)
 	GlobalFree(m_hMem);
 	FreeResource(lpRsrc);
 	return data;
-}
-
-void context_get(hook_stack *stack, PCONTEXT context)
-{
-#ifndef _WIN64
-	stack->eax = context->Eax;
-	stack->ecx = context->Ecx;
-	stack->edx = context->Edx;
-	stack->ebx = context->Ebx;
-	stack->esp = context->Esp;
-	stack->ebp = context->Ebp;
-	stack->esi = context->Esi;
-	stack->edi = context->Edi;
-	stack->eflags = context->EFlags;
-	stack->retaddr = *(DWORD *)context->Esp;
-#else
-	stack->rax = context->Rax;
-	stack->rbx = context->Rbx;
-	stack->rcx = context->Rcx;
-	stack->rdx = context->Rdx;
-	stack->rsp = context->Rsp;
-	stack->rbp = context->Rbp;
-	stack->rsi = context->Rsi;
-	stack->rdi = context->Rdi;
-	stack->r8 = context->R8;
-	stack->r9 = context->R9;
-	stack->r10 = context->R10;
-	stack->r11 = context->R11;
-	stack->r12 = context->R12;
-	stack->r13 = context->R13;
-	stack->r14 = context->R14;
-	stack->r15 = context->R15;
-	stack->eflags = context->EFlags;
-	stack->retaddr = *(DWORD64 *)context->Rsp;
-#endif
-}
-void context_set(hook_stack *stack, PCONTEXT context)
-{
-#ifndef _WIN64
-	context->Eax = stack->eax;
-	context->Ecx = stack->ecx;
-	context->Edx = stack->edx;
-	context->Ebx = stack->ebx;
-	context->Esp = stack->esp;
-	context->Ebp = stack->ebp;
-	context->Esi = stack->esi;
-	context->Edi = stack->edi;
-	context->EFlags = stack->eflags;
-#else
-	context->Rax = stack->rax;
-	context->Rbx = stack->rbx;
-	context->Rcx = stack->rcx;
-	context->Rdx = stack->rdx;
-	context->Rsp = stack->rsp;
-	context->Rbp = stack->rbp;
-	context->Rsi = stack->rsi;
-	context->Rdi = stack->rdi;
-	context->R8 = stack->r8;
-	context->R9 = stack->r9;
-	context->R10 = stack->r10;
-	context->R11 = stack->r11;
-	context->R12 = stack->r12;
-	context->R13 = stack->r13;
-	context->R14 = stack->r14;
-	context->R15 = stack->r15;
-	context->EFlags = stack->eflags;
-#endif
 }

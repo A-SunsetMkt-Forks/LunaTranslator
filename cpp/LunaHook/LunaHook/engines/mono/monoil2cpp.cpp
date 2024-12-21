@@ -24,29 +24,29 @@ namespace
         return newstring;
     }
 }
-void commonsolvemonostring(uintptr_t offset, TextBuffer *buffer)
+std::optional<std::wstring_view> commonsolvemonostring(uintptr_t arg)
 {
-    auto sw = il2cppfunctions::get_string((void *)offset);
+    auto sw = il2cppfunctions::get_string((void *)arg);
     if (!sw)
-        sw = monofunctions::get_string((void *)offset);
+        sw = monofunctions::get_string((void *)arg);
     if (!sw)
-        sw = readmonostring((void *)offset);
+        sw = readmonostring((void *)arg);
     if (!sw)
-        return;
+        return {};
     if (sw.value().size() > TEXT_BUFFER_SIZE)
-        return;
-    buffer->from(sw.value());
+        return {};
+    return sw;
 }
 
-void unity_ui_string_hook_after(uintptr_t *offset, TextBuffer buff)
+void unity_ui_string_embed_fun(uintptr_t &arg, TextBuffer buff)
 {
     auto view = buff.viewW();
     auto newstring = il2cppfunctions::create_string(view);
     if (!newstring)
         newstring = monofunctions::create_string(view);
     if (!newstring)
-        newstring = createmonostring(view, (MonoString *)*offset);
-    *offset = (uintptr_t)newstring;
+        newstring = createmonostring(view, (MonoString *)arg);
+    arg = (uintptr_t)newstring;
 }
 
 uintptr_t tryfindmonoil2cpp(const char *_dll, const char *_namespace, const char *_class, const char *_method, int paramCoun, bool strict)
@@ -55,4 +55,11 @@ uintptr_t tryfindmonoil2cpp(const char *_dll, const char *_namespace, const char
     if (addr)
         return addr;
     return monofunctions::get_method_pointer(_dll, _namespace, _class, _method, paramCoun, strict);
+}
+std::variant<monoloopinfo, il2cpploopinfo> loop_all_methods(bool show)
+{
+    auto ms = il2cppfunctions::loop_all_methods(show);
+    if (ms.size())
+        return ms;
+    return monofunctions::loop_all_methods(show);
 }

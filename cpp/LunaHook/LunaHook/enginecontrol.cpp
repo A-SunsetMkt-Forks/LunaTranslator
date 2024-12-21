@@ -51,7 +51,7 @@ bool safematch(ENGINE *m)
     }
     __except (EXCEPTION_EXECUTE_HANDLER)
     {
-        ConsoleOutput(Match_Error, m->getenginename());
+        ConsoleOutput(TR[Match_Error], m->getenginename());
         // ConsoleOutput("match ERROR");
     }
     return matched;
@@ -65,7 +65,7 @@ bool safeattach(ENGINE *m)
     }
     __except (EXCEPTION_EXECUTE_HANDLER)
     {
-        ConsoleOutput(Attach_Error, m->getenginename());
+        ConsoleOutput(TR[Attach_Error], m->getenginename());
         // ConsoleOutput("attach ERROR");
     }
     return attached;
@@ -86,20 +86,27 @@ bool checkengine()
         bool matched = safematch(m);
         bool attached = matched && safeattach(m);
 
-        //ConsoleOutput("Progress %d/%d, checked engine %s, %s",current,engines.size(),m->getenginename(),infomations[matched+attached]);
-        //ConsoleOutput("Progress %d/%d, %s",current,engines.size(),infomations[matched+attached]);
+        // ConsoleOutput("Progress %d/%d, checked engine %s, %s",current,engines.size(),m->getenginename(),infomations[matched+attached]);
+        // ConsoleOutput("Progress %d/%d, %s",current,engines.size(),infomations[matched+attached]);
         if (matched == false)
             continue;
-        ConsoleOutput(MatchedEngine, m->getenginename());
+        ConsoleOutput(TR[MatchedEngine], m->getenginename());
+        if (attached)
+        {
+            jittypedefault = m->jittype;
+            spDefault.isjithook = true;
+            spDefault.minAddress = 0;
+            spDefault.maxAddress = -1;
+        }
         if (m->is_engine_certain)
         {
-            ConsoleOutput(ConfirmStop, m->getenginename());
+            ConsoleOutput(TR[ConfirmStop], m->getenginename());
             return attached;
         }
 
         if (attached)
         {
-            ConsoleOutput(Attach_Stop, m->getenginename());
+            ConsoleOutput(TR[Attach_Stop], m->getenginename());
             return true;
         }
     }
@@ -121,10 +128,10 @@ void HIJACK()
     std::tie(processStartAddress, processStopAddress) = Util::QueryModuleLimits(GetModuleHandleW(nullptr), 0, 1 + PAGE_NOACCESS);
     spDefault.minAddress = processStartAddress;
     spDefault.maxAddress = processStopAddress;
-    ConsoleOutput(ProcessRange, processStartAddress, processStopAddress);
+    ConsoleOutput(TR[ProcessRange], processStartAddress, processStopAddress);
 
     if (processStartAddress + 0x40000 > processStopAddress)
-        ConsoleOutput(WarningDummy);
+        ConsoleOutput(TR[WarningDummy]);
 
     bool result = false;
     __try
@@ -133,7 +140,7 @@ void HIJACK()
     }
     __except (EXCEPTION_EXECUTE_HANDLER)
     {
-        ConsoleOutput(HIJACK_ERROR);
+        ConsoleOutput(TR[HIJACK_ERROR]);
     }
 
     if (!result)

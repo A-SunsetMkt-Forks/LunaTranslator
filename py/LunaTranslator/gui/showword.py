@@ -5,7 +5,7 @@ from traceback import print_exc
 import qtawesome, requests, gobject, windows, winsharedutils
 import myutils.ankiconnect as anki
 from myutils.hwnd import grabwindow
-from myutils.config import globalconfig, static_data
+from myutils.config import globalconfig, static_data, _TR
 from myutils.utils import (
     loopbackrecorder,
     parsekeystringtomodvkcode,
@@ -93,7 +93,11 @@ class AnkiWindow(QWidget):
     def asyncocr(self, img):
         self.__ocrsettext.emit(ocr_run(img)[0])
 
-    def crop(self):
+    def crophide(self, s=False):
+        if s:
+            self.parent().parent().parent().hide()
+            gobject.baseobject.translation_ui.hide_()
+
         def ocroncefunction(rect):
             img = imageCut(0, rect[0][0], rect[0][1], rect[1][0], rect[1][1])
             fname = gobject.gettempdir(str(uuid.uuid4()) + "." + getimageformat())
@@ -101,6 +105,9 @@ class AnkiWindow(QWidget):
             self.settextsignal.emit(self.editpath, os.path.abspath(fname))
             if globalconfig["ankiconnect"]["ocrcroped"]:
                 self.asyncocr(img)
+            if s:
+                gobject.baseobject.translation_ui.show_()
+                self.parent().parent().parent().show()
 
         rangeselct_function(ocroncefunction, False)
 
@@ -238,7 +245,7 @@ class AnkiWindow(QWidget):
             collect = []
             for hira in self.example.hiras:
                 if hira["orig"] == word or hira.get("origorig", None) == word:
-                    collect.append('<b>{}</b>'.format(hira["orig"]))
+                    collect.append("<b>{}</b>".format(hira["orig"]))
                 else:
                     collect.append(hira["orig"])
             example = "".join(collect)
@@ -434,7 +441,11 @@ class AnkiWindow(QWidget):
         soundbutton2 = QPushButton(qtawesome.icon("fa.music"), "")
         soundbutton2.clicked.connect(self.langdu2)
         cropbutton = QPushButton(qtawesome.icon("fa.crop"), "")
-        cropbutton.clicked.connect(self.crop)
+        cropbutton.clicked.connect(functools.partial(self.crophide, False))
+        cropbutton.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        cropbutton.customContextMenuRequested.connect(
+            functools.partial(self.crophide, True)
+        )
 
         grabwindowbtn = QPushButton(qtawesome.icon("fa.camera"), "")
         grabwindowbtn.clicked.connect(
@@ -485,7 +496,9 @@ class AnkiWindow(QWidget):
             "DeckName_i",
         )
 
-        def refreshcombo(combo: QComboBox):
+        def refreshcombo(combo: QComboBox, changed):
+            if not changed:
+                return
             combo.clear()
             if len(globalconfig["ankiconnect"]["DeckNameS"]) == 0:
                 globalconfig["ankiconnect"]["DeckNameS"].append("lunadeck")
@@ -976,11 +989,13 @@ class showdiction(LMainWindow):
 class searchwordW(closeashidewindow):
     search_word = pyqtSignal(str, bool)
     show_dict_result = pyqtSignal(float, str, str)
+    search_word_in_new_window = pyqtSignal(str)
 
     def __init__(self, parent):
         super(searchwordW, self).__init__(parent, globalconfig["sw_geo"])
         # self.setWindowFlags(self.windowFlags()&~Qt.WindowMinimizeButtonHint)
         self.search_word.connect(self.__click_word_search_function)
+        self.search_word_in_new_window.connect(self.searchwinnewwindow)
         self.show_dict_result.connect(self.__show_dict_result_function)
         self.state = 0
 
@@ -1033,8 +1048,7 @@ class searchwordW(closeashidewindow):
             return
         self.textOutput.setHtml(html)
 
-    def _createnewwindowsearch(self, _):
-        word = self.searchtext.text()
+    def searchwinnewwindow(self, word):
 
         class searchwordWx(searchwordW):
             def closeEvent(self1, event: QCloseEvent):
@@ -1042,9 +1056,13 @@ class searchwordW(closeashidewindow):
                 super(saveposwindow, self1).closeEvent(event)
 
         _ = searchwordWx(self.parent())
+        _.move(_.pos() + QPoint(20, 20))
         _.show()
-        _.searchtext.setText(word)
-        _.__search_by_click_search_btn()
+        _.search_word.emit(word, False)
+
+    def _createnewwindowsearch(self, _):
+        word = self.searchtext.text()
+        self.searchwinnewwindow(word)
 
     def showmenu_auto_sound(self, _):
 
@@ -1098,7 +1116,9 @@ class searchwordW(closeashidewindow):
         self.searchlayout.addWidget(searchbutton)
 
         soundbutton = QPushButton(qtawesome.icon("fa.music"), "")
-        soundbutton.clicked.connect(self.tts_for_searched_word)
+        soundbutton.clicked.connect(
+            lambda: gobject.baseobject.read_text(self.searchtext.text())
+        )
         soundbutton.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         soundbutton.customContextMenuRequested.connect(self.showmenu_auto_sound)
         self.soundbutton = soundbutton
@@ -1133,9 +1153,20 @@ class searchwordW(closeashidewindow):
         self.tabks = []
         self.setCentralWidget(ww)
         self.textOutput = auto_select_webview(self, True)
+        self.textOutput.add_menu(
+            0, _TR("查词"), lambda w: self.search_word.emit(w, False)
+        )
+        self.textOutput.add_menu(
+            1, _TR("在新窗口中查词"), threader(self.search_word_in_new_window.emit)
+        )
+        self.textOutput.add_menu(2, _TR("翻译"), gobject.baseobject.textgetmethod)
+        self.textOutput.add_menu(3, _TR("朗读"), gobject.baseobject.read_text)
         self.textOutput.set_zoom(globalconfig["ZoomFactor"])
         self.textOutput.on_ZoomFactorChanged.connect(
             functools.partial(globalconfig.__setitem__, "ZoomFactor")
+        )
+        self.textOutput.bind(
+            "mdict_entry_call", lambda word: self.search_word.emit(word, False)
         )
         self.cache_results = {}
         self.hiding = True
@@ -1166,13 +1197,6 @@ class searchwordW(closeashidewindow):
         else:
             self.ankiwindow.hide()
         self.isfirstshowanki = False
-
-    def tts_for_searched_word(self):
-        if gobject.baseobject.reader:
-            gobject.baseobject.audioplayer.timestamp = uuid.uuid4()
-            gobject.baseobject.reader.read(
-                self.searchtext.text(), True, gobject.baseobject.audioplayer.timestamp
-            )
 
     def generate_dictionarys(self):
         res = []
@@ -1249,7 +1273,7 @@ class searchwordW(closeashidewindow):
         if word == "":
             return
         if globalconfig["is_search_word_auto_tts"]:
-            self.tts_for_searched_word()
+            gobject.baseobject.read_text(self.searchtext.text())
         self.ankiwindow.reset(word)
         for i in range(self.tab.count()):
             self.tab.removeTab(0)

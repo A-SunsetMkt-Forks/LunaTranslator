@@ -23,11 +23,12 @@ def clipboard_set_image(p: QImage):
 
 @threader
 def grabwindow(app="PNG", callback_origin=None, tocliponly=False):
+    tmsp = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
     if tocliponly:
         fname = ""
         uid = None
     elif callback_origin or tocliponly:
-        fname = gobject.gettempdir(time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime()))
+        fname = gobject.gettempdir(tmsp)
         uid = None
     else:
 
@@ -36,29 +37,20 @@ def grabwindow(app="PNG", callback_origin=None, tocliponly=False):
             hwndx = windows.GetForegroundWindow()
         hwndx = windows.GetAncestor(hwndx)
         gamepath = getpidexe(windows.GetWindowThreadProcessId(hwndx))
-        exename = os.path.basename(gamepath).replace(
-            "." + os.path.basename(gamepath).split(".")[-1], ""
-        )
+        exename = os.path.splitext(os.path.basename(gamepath))[0]
         uid = gobject.baseobject.gameuid
         screenshot_savepath: str = globalconfig.get("screenshot_savepath", "")
-        fnamef = lambda: gobject.getcachedir(
-            "screenshot/"
-            + exename
-            + "/"
-            + time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime()),
-            abspath=False,
-        )
-        if screenshot_savepath:
-            try:
-                dirname = screenshot_savepath.format(exename=exename)
-                os.makedirs(dirname, exist_ok=True)
-                fname = os.path.join(
-                    dirname, time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
-                )
-            except:
-                fname = fnamef()
-        else:
-            fname = fnamef()
+
+        try:
+            if not screenshot_savepath:
+                raise
+            dirname = screenshot_savepath.format(exename=exename)
+            os.makedirs(dirname, exist_ok=True)
+            fname = os.path.join(dirname, tmsp)
+        except:
+            fname = gobject.getcachedir(
+                "screenshot/{}/{}".format(exename, tmsp), abspath=False
+            )
 
     def callback_1(callback_origin, uid, tocliponly, p: QPixmap, fn):
         if p.isNull():
@@ -80,7 +72,6 @@ def grabwindow(app="PNG", callback_origin=None, tocliponly=False):
     hwnd = windows.GetAncestor(hwnd)
     _ = windows.GetClientRect(hwnd)
     p = gdi_screenshot(0, 0, _[2], _[3], hwnd)
-
     callback(p, fname + "_gdi." + app)
     isshit = (not callback_origin) and (not tocliponly)
     if p.isNull() or isshit:
@@ -108,6 +99,10 @@ def grabwindow(app="PNG", callback_origin=None, tocliponly=False):
                 callback(p, fname + "_winrt_magpie." + app)
 
             _()
+    elif tocliponly:
+        gobject.baseobject.translation_ui.displaystatus.emit(
+            "saved to clipboard", False, True
+        )
 
 
 def getpidexe(pid):
@@ -116,8 +111,8 @@ def getpidexe(pid):
     )
     if not hproc:
 
-        hproc = windows.OpenProcess(
-            windows.PROCESS_QUERY_LIMITED_INFORMATION, False, pid
+        hproc = windows.AutoHandle(
+            windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
         )
     if not hproc:
         name_ = None

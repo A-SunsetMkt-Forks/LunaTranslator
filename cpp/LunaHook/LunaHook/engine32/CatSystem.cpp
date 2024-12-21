@@ -133,12 +133,12 @@
 // 051ae554   042c4c20
 // 051ae558   0000002c
 
-static void SpecialHookCatSystem3(hook_stack *stack, HookParam *, uintptr_t *data, uintptr_t *split, size_t *len)
+static void SpecialHookCatSystem3(hook_context *context, HookParam *, uintptr_t *data, uintptr_t *split, size_t *len)
 {
   // DWORD ch = *data = *(DWORD *)(esp_base + hp->offset); // arg2
-  DWORD ch = *data = stack->stack[2];
+  DWORD ch = *data = context->stack[2];
   *len = LeadByteTable[(ch >> 8) & 0xff]; // CODEC_ANSI_BE
-  *split = stack->edx >> 16;
+  *split = context->edx >> 16;
 }
 
 bool InsertCatSystemHook()
@@ -151,7 +151,7 @@ bool InsertCatSystemHook()
   //   if (*(DWORD*)i==0xcccccccc) break;
   // if (i==j) return;
   // hp.address=i+4;
-  // hp.offset=get_reg(regs::eax);
+  // hp.offset=regoffset(eax);
   // hp.index=4;
   // hp.type =CODEC_ANSI_BE|DATA_INDIRECT|USING_SPLIT|SPLIT_INDIRECT;
   // hp.length_offset=1;
@@ -166,14 +166,11 @@ bool InsertCatSystemHook()
   }; // skip two leading 0xcc
   ULONG addr = MemDbg::findCallerAddress((ULONG)::GetTextMetricsA, beg, processStartAddress, processStopAddress);
   if (!addr)
-  {
-    ConsoleOutput("CatSystem2: pattern not exist");
     return false;
-  }
 
   HookParam hp;
   hp.address = addr + addr_offset; // skip 1 push?
-  hp.offset = get_stack(2);        // text character is in arg2
+  hp.offset = stackoffset(2);      // text character is in arg2
 
   // jichi 12/23/2014: Modify split for new catsystem
   bool newEngine = Util::CheckFile(L"cs2conf.dll");
@@ -183,8 +180,7 @@ bool InsertCatSystemHook()
     // NewHook(hp, "CatSystem3");
     // ConsoleOutput("INSERT CatSystem3");
     hp.type = CODEC_ANSI_BE | USING_SPLIT;
-    hp.split = get_reg(regs::esi);
-    ConsoleOutput("INSERT CatSystem3new");
+    hp.split = regoffset(esi);
     return NewHook(hp, "CatSystem3new");
   }
   else
@@ -195,12 +191,12 @@ bool InsertCatSystemHook()
                     0x66, 0x3b, 0xf8};
     if (MemDbg::findBytes(check, sizeof(check), addr, addr + 0x100))
     {
-      hp.split = get_stack(1);
-      hp.offset = get_reg(regs::edx);
+      hp.split = stackoffset(1);
+      hp.offset = regoffset(edx);
     }
     else
     {
-      hp.split = get_reg(regs::edx);
+      hp.split = regoffset(edx);
     }
     hp.type = CODEC_ANSI_BE | USING_SPLIT;
     ConsoleOutput("INSERT CatSystem2");
@@ -228,21 +224,19 @@ bool InsertCatSystem2Hook()
   ULONG range = min(processStopAddress - processStartAddress, MAX_REL_ADDR);
   ULONG addr = MemDbg::findBytes(bytes, sizeof(bytes), processStartAddress, processStartAddress + range);
   if (!addr)
-  {
     return false;
-  }
 
   HookParam hp;
   hp.address = addr;
-  hp.offset = get_reg(regs::eax);
+  hp.offset = regoffset(eax);
   hp.type = USING_STRING | CODEC_UTF8;
   hp.filter_fun = [](TextBuffer *buffer, HookParam *hp)
   {
-    static std::regex rx(R"(\[(.+?)/.+\])");
-    auto _ = std::regex_replace(buffer->strA(), rx, "$1");
+    auto _ = std::regex_replace(buffer->strA(), std::regex(R"(\[(.+?)/.+\])"), "$1");
+    strReplace(_, "\\@", "");
     buffer->from(_);
   };
-  hp.newlineseperator = L"\\n";
+  hp.lineSeparator = L"\\n";
   return NewHook(hp, "CatSystem2new");
 }
 namespace
@@ -254,7 +248,7 @@ namespace
     {
       // String in ecx
       // bool __fastcall isLeadByteChar(const char *s, DWORD edx)
-      // bool  isLeadByteChar(hook_stack*s,void* data, size_t* len,uintptr_t*role)
+      // bool  isLeadByteChar(hook_context*s,void* data, size_t* len,uintptr_t*role)
       // {
       //   auto pc=(CHAR*)s->ecx;
 
@@ -580,7 +574,7 @@ namespace
       }
       LPSTR trimmedText;
       size_t trimmedSize;
-      void hookBefore(hook_stack *s, HookParam *hp, TextBuffer *buffer, uintptr_t *role)
+      void hookBefore(hook_context *s, HookParam *hp, TextBuffer *buffer, uintptr_t *role)
       {
         // static std::unordered_set<uint64_t> hashes_;
         auto text = (LPSTR)s->eax; // arg1
@@ -637,7 +631,7 @@ namespace
         strReplace(oldData, "\\n", "\n");
         buffer->from(oldData);
       }
-      void hookafter(hook_stack *s, TextBuffer buffer)
+      void hookafter(hook_context *s, TextBuffer buffer)
       {
         auto newData = buffer.strA();
         strReplace(newData, "\n", "\\n");
@@ -812,7 +806,7 @@ namespace
      *  004985CC   CC               INT3
      *  004985CD   CC               INT3
      */
-    bool attach(ULONG startAddress, ULONG stopAddress, HookParamType code)
+    bool attach(ULONG startAddress, ULONG stopAddress, bool utf8)
     {
       const uint8_t bytes[] = {
           0xe8, XX4,  // 004b00dc   e8 7f191300      call .005e1a60 ; jichi: hook after here
@@ -827,51 +821,124 @@ namespace
       HookParam hp;
       hp.address = addr + 5;
       hp.type = USING_STRING | EMBED_ABLE | NO_CONTEXT;
-      if (code)
-        hp.type |= code;
+      if (utf8)
+        hp.type |= CODEC_UTF8;
       else
+      {
         hp.type |= EMBED_DYNA_SJIS;
+
+        static ULONG p;
+        p = Patch::patchEncoding(startAddress, stopAddress);
+        if (p)
+        {
+          hp.type |= EMBED_DYNA_SJIS;
+          hp.embed_hook_font = F_GetGlyphOutlineA;
+          patch_fun = []()
+          {
+            if (*(WORD *)p == 0xc985)
+            { // test ecx,ecx , thiscall
+              ReplaceFunction((PVOID)p, (PVOID)(ULONG)Patch::Private::thiscallisLeadByteChar);
+            }
+            else
+              ReplaceFunction((PVOID)p, (PVOID)(ULONG)Patch::Private::isLeadByteChar);
+          };
+        }
+      }
       hp.text_fun = Private::hookBefore;
-      hp.hook_after = Private::hookafter;
-      hp.hook_font = F_GetGlyphOutlineA;
+      hp.embed_fun = Private::hookafter;
+      hp.embed_hook_font = F_GetGlyphOutlineA;
       hp.filter_fun = [](TextBuffer *buffer, HookParam *hp)
       {
-        static std::regex rx(R"(\[(.+?)/.+\])");
-        buffer->from(std::regex_replace(buffer->strA(), rx, "$1"));
+        buffer->from(std::regex_replace(buffer->strA(), std::regex(R"(\[(.+?)/.+\])"), "$1"));
       };
-
-      static ULONG p;
-      p = Patch::patchEncoding(startAddress, stopAddress);
-      if (p)
-      {
-        hp.type |= EMBED_DYNA_SJIS;
-        hp.hook_font = F_GetGlyphOutlineA;
-        patch_fun = []()
-        {
-          if (*(WORD *)p == 0xc985)
-          { // test ecx,ecx , thiscall
-            ReplaceFunction((PVOID)p, (PVOID)(ULONG)Patch::Private::thiscallisLeadByteChar);
-          }
-          else
-            ReplaceFunction((PVOID)p, (PVOID)(ULONG)Patch::Private::isLeadByteChar);
-        };
-      }
 
       return NewHook(hp, "EmbedCS2");
     }
   }
 } // namespace ScenarioHook
+namespace
+{
+  bool cs2()
+  {
+    // https://vndb.org/v26537
+    const uint8_t bytes[] = {/*
+    .text:0065C10F                 cmp     bx, 20h ; ' '
+.text:0065C113                 jz      loc_65C5A6
+.text:0065C119                 mov     ecx, 8140h
+.text:0065C11E                 cmp     bx, cx
+.text:0065C121                 jnz     short loc_65C140
+.text:0065C123                 jmp     loc_65C5A6
+.text:0065C128 ; ---------------------------------------------------------------------------
+.text:0065C128
+.text:0065C128 loc_65C128:                             ; CODE XREF: sub_65C080+8D↑j
+.text:0065C128                 cmp     bx, 20h ; ' '
+.text:0065C12C                 jz      loc_65C5A6
+.text:0065C132                 mov     ecx, 3000h
+.text:0065C137                 cmp     bx, cx
+.text:0065C13A                 jz      loc_65C5A6
+if ( a9 )
+  {
+    if ( a3 == 32 || a3 == 12288 )
+      return 1;
+  }
+  else if ( a3 == 32 || a3 == 0x8140 )
+  {
+    return 1;
+  }
+*/
+                             0x66, 0x83, 0xfb, 0x20,
+                             0x0f, 0x84, XX4,
+                             0xB9, 0x40, 0x81, 0x00, 0x00,
+                             0x66, 0x3B, 0xD9,
+                             0x75, XX,
+
+                             0xe9, XX4,
+
+                             0x66, 0x83, 0xfb, 0x20,
+                             0x0f, 0x84, XX4,
+                             0xB9, 0x00, 0x30, 0x00, 0x00,
+                             0x66, 0x3B, 0xD9,
+                             0x0f, 0x84, XX4
+
+    };
+    ULONG addr = MemDbg::findBytes(bytes, sizeof(bytes), processStartAddress, processStopAddress);
+    if (!addr)
+      return false;
+    addr = MemDbg::findEnclosingAlignedFunction(addr);
+    if (!addr)
+      return false;
+    HookParam hp;
+    hp.address = addr;
+    hp.type = USING_CHAR;
+    hp.text_fun = [](hook_context *context, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
+    {
+      if (context->stack[8])
+      {
+        hp->type |= CODEC_UTF16;
+        hp->type &= ~CODEC_ANSI_BE;
+      }
+      else
+      {
+        hp->type |= CODEC_ANSI_BE;
+        hp->type &= ~CODEC_UTF16;
+      }
+      auto c = context->stack[2];
+      buffer->from_t<wchar_t>(c);
+    };
+    return NewHook(hp, "catsystem");
+  }
+}
 bool CatSystem::attach_function()
 {
-  HookParamType code = CODEC_ANSI_LE;
+  bool utf8 = false;
   auto b1 = InsertCatSystemHook();
   if (!b1)
   {
     b1 |= InsertCatSystem2Hook();
-    code = CODEC_UTF8;
+    utf8 = true;
   }
-  auto embed = ScenarioHook::attach(processStartAddress, processStopAddress, code);
-
+  auto embed = ScenarioHook::attach(processStartAddress, processStopAddress, utf8);
+  b1 = b1 || cs2();
   b1 |= embed;
   return b1;
 }

@@ -31,8 +31,8 @@ bool InsertAtelierHook()
       { // find the function entry
         HookParam hp;
         hp.address = i + 2;
-        hp.offset = get_stack(2);
-        hp.split = get_reg(regs::esp);
+        hp.offset = stackoffset(2);
+        hp.split = regoffset(esp);
         hp.type = USING_SPLIT;
         ConsoleOutput("INSERT Aterlier KAGUYA");
 
@@ -73,9 +73,9 @@ bool InsertAtelierKaguya2Hook()
 
   HookParam hp;
   hp.address = addr;
-  hp.offset = get_reg(regs::eax);
-  hp.type = USING_STRING | EMBED_AFTER_OVERWRITE  | EMBED_ABLE | EMBED_DYNA_SJIS;
-  hp.hook_font = F_TextOutA;
+  hp.offset = regoffset(eax);
+  hp.type = USING_STRING | EMBED_AFTER_OVERWRITE | EMBED_ABLE | EMBED_DYNA_SJIS;
+  hp.embed_hook_font = F_TextOutA;
   hp.filter_fun = NewLineCharToSpaceFilterA;
   ConsoleOutput("INSERT Atelier KAGUYA2");
 
@@ -110,7 +110,7 @@ bool InsertAtelierKaguya3Hook()
 
   HookParam hp;
   hp.address = addr;
-  hp.offset = get_reg(regs::eax);
+  hp.offset = regoffset(eax);
   hp.type = USING_STRING;
   hp.filter_fun = NewLineCharToSpaceFilterA;
   ConsoleOutput("INSERT Atelier KAGUYA3");
@@ -150,7 +150,7 @@ bool InsertAtelierKaguya4Hook()
 
   HookParam hp;
   hp.address = addr + addr_offset;
-  hp.offset = get_reg(regs::eax);
+  hp.offset = regoffset(eax);
   hp.type = USING_STRING;
   hp.filter_fun = NewLineCharToSpaceFilterA;
   ConsoleOutput("INSERT Atelier KAGUYA4");
@@ -185,7 +185,7 @@ bool InsertAtelierKaguya5Hook()
 
   HookParam hp;
   hp.address = addr + 3;
-  hp.offset = get_reg(regs::eax);
+  hp.offset = regoffset(eax);
   hp.type = USING_STRING;
   hp.filter_fun = NewLineCharToSpaceFilterA;
   ConsoleOutput("INSERT Atelier KAGUYA5");
@@ -209,7 +209,7 @@ bool InsertAtelierKaguyaX()
     return false;
   HookParam hp;
   hp.address = addr;
-  hp.offset = get_stack(1);
+  hp.offset = stackoffset(1);
   hp.type = USING_STRING;
 
   return NewHook(hp, "Atelier KAGUYA3");
@@ -237,7 +237,7 @@ bool Atelier2attach_function()
 
   HookParam hp;
   hp.address = addr + sizeof(bytes) - 1;
-  hp.offset = get_stack(10);
+  hp.offset = stackoffset(10);
   hp.type = USING_CHAR | NO_CONTEXT;
   // NO_CONTEXT:
   // 牝奴隷 ～犯された放課後～
@@ -247,16 +247,18 @@ bool Atelier2attach_function()
 
 bool Atelier2attach_function2()
 {
-  // https://vndb.org/v7264
-  // 禁断の病棟 特殊精神科医 遊佐惣介の診察記録
-  auto addr = MemDbg::findCallerAddressAfterInt3((ULONG)TextOutA, processStartAddress, processStopAddress);
-  if (addr == 0)
-    return 0;
+  auto addr = findiatcallormov((ULONG)TextOutA, processStartAddress, processStartAddress, processStopAddress);
+  if (!addr)
+    return false;
+  auto faddr = MemDbg::findEnclosingAlignedFunction(addr);
+  if (!faddr)
+    return false;
   HookParam hp;
-  hp.address = addr;
-  hp.offset = get_stack(3);
-  hp.type = USING_STRING | DATA_INDIRECT;
-
+  hp.address = faddr;
+  hp.offset = stackoffset(3);
+  hp.type = USING_STRING; // https://vndb.org/v13691  // 肉牝R30 ～肉欲に堕ちた牝たち～
+  if (addr - faddr > 0x40)
+    hp.type |= DATA_INDIRECT; // https://vndb.org/v7264  // 禁断の病棟 特殊精神科医 遊佐惣介の診察記録
   return NewHook(hp, "Atelier KAGUYA");
 }
 bool Atelier2::attach_function()

@@ -9,6 +9,7 @@ from myutils.config import (
     get_launchpath,
     savehook_new_list,
     static_data,
+    get_platform,
 )
 
 from traceback import print_exc
@@ -65,10 +66,12 @@ def gethookgrid_em(self):
             "",
         ],
         [
-            "保留原文",
-            D_getsimpleswitch(
+            "显示模式",
+            "",
+            D_getsimplecombobox(
+                ["翻译", "原文_翻译", "翻译_原文"],
                 globalconfig["embedded"],
-                "keeprawtext",
+                "displaymode",
                 callback=lambda _: gobject.baseobject.textsource.flashembedsettings(),
             ),
         ],
@@ -192,14 +195,6 @@ def gethookgrid(self):
             ),
         ],
         [
-            "过滤包含乱码的文本行",
-            D_getsimpleswitch(globalconfig, "filter_chaos_code"),
-            D_getIconButton(
-                icon="fa.gear",
-                callback=lambda: codeacceptdialog(self),
-            ),
-        ],
-        [
             "使用YAPI注入",
             D_getsimpleswitch(globalconfig, "use_yapi"),
         ],
@@ -280,6 +275,8 @@ def selectgameuid(self):
     button.button(QDialogButtonBox.StandardButton.Ok).setText(_TR("确定"))
     button.button(QDialogButtonBox.StandardButton.Cancel).setText(_TR("取消"))
     if dialog.exec():
+        if not _internal:
+            return None
         return _internal[combo.currentIndex()]
 
 
@@ -426,63 +423,6 @@ def filetranslate(self):
                                 globalconfig,
                                 "translator_2",
                                 internal=alltrans,
-                            ),
-                        ],
-                    ],
-                ),
-                0,
-                "group",
-            ),
-        ],
-        [
-            (
-                dict(
-                    title="LiveCaptions",
-                    type="grid",
-                    grid=[
-                        [
-                            "开始",
-                            D_getsimpleswitch(
-                                globalconfig["sourcestatus2"]["livecaptions"],
-                                "use",
-                                name="livecaptions",
-                                parent=self,
-                                callback=functools.partial(
-                                    yuitsu_switch,
-                                    self,
-                                    globalconfig["sourcestatus2"],
-                                    "sourceswitchs",
-                                    "livecaptions",
-                                    gobject.baseobject.starttextsource,
-                                ),
-                                pair="sourceswitchs",
-                            ),
-                        ],
-                        [
-                            "截取行数",
-                            D_getspinbox(
-                                1,
-                                10,
-                                globalconfig,
-                                "livecaptions_cachesentence",
-                            ),
-                        ],
-                        [
-                            "刷新延迟_(ms)",
-                            D_getspinbox(
-                                10,
-                                100000,
-                                globalconfig,
-                                "livecaptions_delay",
-                            ),
-                        ],
-                        [
-                            "最长等待时间_(ms)",
-                            D_getspinbox(
-                                10,
-                                100000,
-                                globalconfig,
-                                "livecaptions_maxwait",
                             ),
                         ],
                     ],
@@ -642,6 +582,8 @@ def setTabOne_lazy(self, basel: QVBoxLayout):
         ("ocr", "OCR"),
         ("copy", "剪贴板"),
     ]
+    if get_platform() == "xp":
+        _rank.pop(1)
     __ = []
     for key, name in _rank:
         __.append(getsmalllabel(name))
@@ -681,15 +623,21 @@ def setTabOne_lazy(self, basel: QVBoxLayout):
     ]
     gridlayoutwidget, do = makegrid(tab1grids, delay=True)
     basel.addWidget(gridlayoutwidget)
+    titles = ["HOOK设置", "OCR设置", "剪贴板", "其他", "文本输出"]
+    funcs = [
+        lambda l: setTabOne_lazy_h(self, l),
+        lambda l: getocrgrid_table(self, l),
+        lambda l: makescrollgrid(getTabclip(self), l),
+        lambda l: makescrollgrid(filetranslate(self), l),
+        lambda l: makescrollgrid(outputgrid(self), l),
+    ]
+
+    if get_platform() == "xp":
+        titles.pop(1)
+        funcs.pop(1)
     tab, dotab = makesubtab_lazy(
-        ["HOOK设置", "OCR设置", "剪贴板", "文本输出", "其他"],
-        [
-            lambda l: setTabOne_lazy_h(self, l),
-            lambda l: getocrgrid_table(self, l),
-            lambda l: makescrollgrid(getTabclip(self), l),
-            lambda l: makescrollgrid(outputgrid(self), l),
-            lambda l: makescrollgrid(filetranslate(self), l),
-        ],
+        titles,
+        funcs,
         delay=True,
     )
     basel.addWidget(tab)

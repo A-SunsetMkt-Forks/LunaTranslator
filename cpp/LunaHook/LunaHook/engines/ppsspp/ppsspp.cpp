@@ -1,5 +1,4 @@
-
-#include "psputils.hpp"
+#include "ppsspp.h"
 #include "specialgames.hpp"
 // See: https://github.com/hrydgard/ppsspp
 
@@ -63,9 +62,9 @@ struct PPSSPPFunction
     const char *pattern;  // debug string used within the function
 };
 
-namespace
+namespace PPSSPP
 {
-    uintptr_t findleapushaddr(uintptr_t addr)
+    uintptr_t findleapushalignfuncaddr(uintptr_t addr)
     {
 #ifndef _WIN64
         addr = MemDbg::findPushAddress(addr, processStartAddress, processStopAddress);
@@ -110,16 +109,16 @@ bool InsertPPSSPPHLEHooks()
     auto functions = std::vector<PPSSPPFunction>{
 
         // https://github.com/hrydgard/ppsspp/blob/master/Core/HLE/sceCcc.cpp
-        {"sceCccStrlenSJIS", GETARG1, USING_STRING, 0, "sceCccStrlenSJIS("},
-        {"sceCccStrlenUTF8", GETARG1, CODEC_UTF8 | USING_STRING, 0, "sceCccStrlenUTF8("},
-        {"sceCccStrlenUTF16", GETARG1, CODEC_UTF16 | USING_STRING, 0, "sceCccStrlenUTF16("},
+        // {"sceCccStrlenSJIS", GETARG1, USING_STRING, 0, "sceCccStrlenSJIS("},
+        // {"sceCccStrlenUTF8", GETARG1, CODEC_UTF8 | USING_STRING, 0, "sceCccStrlenUTF8("},
+        // {"sceCccStrlenUTF16", GETARG1, CODEC_UTF16 | USING_STRING, 0, "sceCccStrlenUTF16("},
 
-        {"sceCccSJIStoUTF8", GETARG3, USING_STRING, 0, "sceCccSJIStoUTF8("},
-        {"sceCccSJIStoUTF16", GETARG3, USING_STRING, 0, "sceCccSJIStoUTF16("},
-        {"sceCccUTF8toSJIS", GETARG3, CODEC_UTF8 | USING_STRING, 0, "sceCccUTF8toSJIS("},
-        {"sceCccUTF8toUTF16", GETARG3, CODEC_UTF8 | USING_STRING, 0, "sceCccUTF8toUTF16("},
-        {"sceCccUTF16toSJIS", GETARG3, CODEC_UTF16 | USING_STRING, 0, "sceCccUTF16toSJIS("},
-        {"sceCccUTF16toUTF8", GETARG3, CODEC_UTF16 | USING_STRING, 0, "sceCccUTF16toUTF8("},
+        // {"sceCccSJIStoUTF8", GETARG3, USING_STRING, 0, "sceCccSJIStoUTF8("},
+        // {"sceCccSJIStoUTF16", GETARG3, USING_STRING, 0, "sceCccSJIStoUTF16("},
+        // {"sceCccUTF8toSJIS", GETARG3, CODEC_UTF8 | USING_STRING, 0, "sceCccUTF8toSJIS("},
+        // {"sceCccUTF8toUTF16", GETARG3, CODEC_UTF8 | USING_STRING, 0, "sceCccUTF8toUTF16("},
+        // {"sceCccUTF16toSJIS", GETARG3, CODEC_UTF16 | USING_STRING, 0, "sceCccUTF16toSJIS("},
+        // {"sceCccUTF16toUTF8", GETARG3, CODEC_UTF16 | USING_STRING, 0, "sceCccUTF16toUTF8("},
 
         // https://github.com/hrydgard/ppsspp/blob/master/Core/HLE/sceFont.cpp
         {"sceFontGetCharInfo", GETARG2, CODEC_UTF16, GETARG1, "sceFontGetCharInfo("},
@@ -127,20 +126,15 @@ bool InsertPPSSPPHLEHooks()
         {"sceFontGetCharImageRect", GETARG2, CODEC_UTF16, GETARG1, "sceFontGetCharImageRect("},
         {"sceFontGetShadowImageRect", GETARG2, CODEC_UTF16, GETARG1, "sceFontGetShadowImageRect("},
         {"sceFontGetCharGlyphImage", GETARG2, CODEC_UTF16, GETARG1, "sceFontGetCharGlyphImage("},
-        {"sceFontGetCharGlyphImage_Clip", GETARG2, CODEC_UTF16, GETARG1, "sceFontGetCharGlyphImage_Clip("},
+        //{"sceFontGetCharGlyphImage_Clip", GETARG2, CODEC_UTF16, GETARG1, "sceFontGetCharGlyphImage_Clip("},
         {"sceFontGetShadowGlyphImage", GETARG2, CODEC_UTF16, GETARG1, "sceFontGetShadowGlyphImage("},
-        {"sceFontGetShadowGlyphImage_Clip", GETARG2, CODEC_UTF16, GETARG1, "sceFontGetShadowGlyphImage_Clip("},
+        //{"sceFontGetShadowGlyphImage_Clip", GETARG2, CODEC_UTF16, GETARG1, "sceFontGetShadowGlyphImage_Clip("},
 
         // https://github.com/hrydgard/ppsspp/blob/master/Core/HLE/sceKernelInterrupt.cpp
-        {"sysclib_strcat", GETARG2, USING_STRING, 0, "Untested sysclib_strcat("},
-        {"sysclib_strcpy", GETARG2, USING_STRING, 0, "Untested sysclib_strcpy("},
-        {"sysclib_strlen", GETARG1, USING_STRING, 0, "Untested sysclib_strlen("}
+        // {"sysclib_strcat", GETARG2, USING_STRING, 0, "Untested sysclib_strcat("},
+        // {"sysclib_strcpy", GETARG2, USING_STRING, 0, "Untested sysclib_strcpy("},
+        // {"sysclib_strlen", GETARG1, USING_STRING, 0, "Untested sysclib_strlen("}
 
-        // Disabled as I am not sure how to deal with the source string
-        //, { "sceCccEncodeSJIS", 2, USING_STRING, 0, "sceCccEncodeSJIS(" }
-        //, { "sceCccEncodeUTF8", 2, CODEC_UTF8,   0, "sceCccEncodeUTF8(" }
-        //, { "sceCccEncodeUTF16", 2, CODEC_UTF16, 0, "sceCccEncodeUTF16(" }
-        //, { "sysclib_strcmp", 2, USING_STRING, 0, "Untested sysclib_strcmp(" }
     };
     auto succ = false;
     for (auto &&function : functions)
@@ -148,7 +142,7 @@ bool InsertPPSSPPHLEHooks()
         auto addr = MemDbg::findBytes(function.pattern, ::strlen(function.pattern), processStartAddress, processStopAddress);
         if (!addr)
             continue;
-        addr = findleapushaddr(addr);
+        addr = PPSSPP::findleapushalignfuncaddr(addr);
 
         if (!addr)
             continue;
@@ -196,10 +190,10 @@ bool PPSSPPinithooksearch(){
 				{
 					hp.type |= NO_CONTEXT | USING_SPLIT | SPLIT_INDIRECT;
 #ifndef _WIN64
-                    hp.split = get_reg(regs::ebp);
-					hp.split_index =get_reg(regs::eax); // this is where PPSSPP 1.8.0 stores its return address stack
+                    hp.split = regoffset(ebp);
+					hp.split_index =regoffset(eax); // this is where PPSSPP 1.8.0 stores its return address stack
 #else
-					hp.split = get_reg(regs::r14);
+					hp.split = regoffset(r14);
 					hp.split_index = -8; // this is where PPSSPP 1.8.0 stores its return address stack
 #endif
 				};
@@ -268,16 +262,28 @@ uintptr_t getDoJitAddress()
 
 namespace ppsspp
 {
-
+    struct GameInfo
+    {
+        std::string DISC_ID{""};
+        std::string TITLE{""};
+    } game_info;
     bool checkiscurrentgame(const emfuncinfo &em)
     {
-        auto wininfos = get_proc_windows();
-        for (auto &&info : wininfos)
+        if (game_info.DISC_ID.size())
         {
-            if (info.title.find(acastw(em._id)) != info.title.npos)
-                return true;
+            std::smatch match;
+            return std::regex_match(game_info.DISC_ID, match, std::regex(em._id));
         }
-        return false;
+        else
+        {
+            auto wininfos = get_proc_windows();
+            for (auto &&info : wininfos)
+            {
+                if (std::regex_search(info.title, std::wregex(acastw(em._id))))
+                    return true;
+            }
+            return false;
+        }
     }
     std::unordered_set<uintptr_t> breakpoints;
 
@@ -334,10 +340,13 @@ namespace ppsspp
         HookParam hpinternal;
         hpinternal.address = ret;
         hpinternal.emu_addr = em_address; // 用于生成hcode
-        hpinternal.type = USING_STRING | NO_CONTEXT | BREAK_POINT | op.type;
+        hpinternal.type = NO_CONTEXT | BREAK_POINT | op.type;
+        if (!(op.type & USING_CHAR))
+            hpinternal.type |= USING_STRING;
+        hpinternal.codepage = 932;
         hpinternal.text_fun = op.hookfunc;
         hpinternal.filter_fun = op.filterfun;
-        hpinternal.argidx = op.argidx;
+        hpinternal.offset = op.offset;
         hpinternal.padding = op.padding;
         hpinternal.jittype = JITTYPE::PPSSPP;
         NewHook(hpinternal, op._id);
@@ -427,7 +436,7 @@ namespace ppsspp
         };
     }
 
-    void unsafeoncegetJitBlockCache(hook_stack *stack)
+    void unsafeoncegetJitBlockCache(hook_context *context)
     {
 
 // class JitBlockCache : public JitBlockCacheDebugInterface {
@@ -436,11 +445,11 @@ namespace ppsspp
 // std::unordered_multimap<u32, int> proxyBlockMap_; ->64
 // int num_blocks_ = 0;
 #ifdef _WIN64
-        auto num_blocks_ = *(uint32_t *)(stack->rcx + 72 + 16 + 88);
-        auto blocks_ = (JitBlock *)*(uintptr_t *)(stack->rcx + 72 + 16 + 88 - 64 - 8);
+        auto num_blocks_ = *(uint32_t *)(context->rcx + 72 + 16 + 88);
+        auto blocks_ = (JitBlock *)*(uintptr_t *)(context->rcx + 72 + 16 + 88 - 64 - 8);
 #else
-        auto num_blocks_ = *(uint32_t *)(stack->ecx + 88);
-        auto blocks_ = (JitBlock *)*(uintptr_t *)(stack->ecx + 88 - 32 - 4);
+        auto num_blocks_ = *(uint32_t *)(context->ecx + 88);
+        auto blocks_ = (JitBlock *)*(uintptr_t *)(context->ecx + 88 - 32 - 4);
 #endif
         int checkvalid = 0;
         num_blocks_ -= 1; // last one is now dojiting
@@ -463,49 +472,104 @@ namespace ppsspp
 
         return;
     }
-    bool oncegetJitBlockCache(hook_stack *stack)
+    bool oncegetJitBlockCache(hook_context *context)
     {
         // 在游戏中途hook，获取已compiled jit
         // 虽然只有在每次进行jit时才会触发，不过测试后续触发的也挺频繁的。
         __try
         {
-            unsafeoncegetJitBlockCache(stack);
+            unsafeoncegetJitBlockCache(context);
         }
         __except (EXCEPTION_EXECUTE_HANDLER)
         {
         }
         return true;
     }
+    void Load_PSP_ISO_StringFromFormat()
+    {
+        /*
+        bool Load_PSP_ISO(FileLoader *fileLoader, std::string *error_string) {
+    // Mounting stuff relocated to InitMemoryForGameISO due to HD Remaster restructuring of code.
+
+    std::string sfoPath("disc0:/PSP_GAME/PARAM.SFO");
+    PSPFileInfo fileInfo = pspFileSystem.GetFileInfo(sfoPath.c_str());
+    if (fileInfo.exists) {
+        std::vector<u8> paramsfo;
+        pspFileSystem.ReadEntireFile(sfoPath, paramsfo);
+        if (g_paramSFO.ReadSFO(paramsfo)) {
+            std::string title = StringFromFormat("%s : %s", g_paramSFO.GetValueString("DISC_ID").c_str(), g_paramSFO.GetValueString("TITLE").c_str());
+            INFO_LOG(Log::Loader, "%s", title.c_str());
+            System_SetWindowTitle(title);
+        }
+    }
+
+    ------>StringFromFormat
+        */
+        BYTE sig[] = {
+#ifndef _WIN64
+            0x55, 0x8B, 0xEC, 0x6A, 0xFF, 0x68, XX4, 0x64, 0xA1, 0x00, 0x00, 0x00, 0x00, 0x50, 0x64, 0x89, 0x25, 0x00, 0x00, 0x00, 0x00, 0x83, 0xEC, 0x14, 0x56, 0x8B, 0x75, 0x08, 0x0F, 0x57, 0xC0, 0xC7, 0x45, 0xE8, 0x00, 0x00, 0x00, 0x00, 0x8D, 0x46, 0x10, 0x57, 0x89, 0x45, 0xF0, 0x0F, 0x11, 0x06, 0xC7, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC7, 0x46, 0x14, 0x00, 0x00, 0x00, 0x00, 0xC7, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC7, 0x46, 0x14, 0x0F, 0x00, 0x00, 0x00, 0xC6, 0x06, 0x00, 0xC7, 0x45, 0xFC, 0x00, 0x00, 0x00, 0x00, 0xC7, 0x45, 0xE8, 0x01, 0x00, 0x00, 0x00, 0xE8, XX4, 0x8B, 0xC8, 0x8D, 0x45, 0x10, 0x50, 0x6A, 0x00, 0xFF, 0x75, 0x0C, 0x8B, 0x01, 0x6A, 0x00, 0x6A, 0x00, 0xFF, 0x71, 0x04, 0x83, 0xC8, 0x02, 0x89, 0x4D, 0xE0, 0x50, 0xE8, XX4
+#else
+            0x48, 0x8B, 0xC4, 0x48, 0x89, 0x50, 0x10, 0x48, 0x89, 0x48, 0x08, 0x4C, 0x89, 0x40, 0x18, 0x4C, 0x89, 0x48, 0x20, 0x53, 0x55, 0x56, 0x57, 0x41, 0x56, 0x41, 0x57, 0x48, 0x83, 0xEC, 0x48, 0x48, 0x8B, 0xDA, 0x48, 0x8B, 0xF9, 0x33, 0xED, 0x89, 0x68, 0xB8, 0x0F, 0x57, 0xC0, 0x0F, 0x11, 0x01, 0x48, 0x89, 0x69, 0x10, 0x48, 0xC7, 0x41, 0x18, 0x0F, 0x00, 0x00, 0x00, 0x40, 0x88, 0x29, 0xC7, 0x40, 0xB8, 0x01, 0x00, 0x00, 0x00, 0x4C, 0x8D, 0x70, 0x18, 0xE8, XX4, 0x48, 0x8B, 0xF0, 0x48, 0x8B, 0x08, 0x48, 0x83, 0xC9, 0x02, 0x4C, 0x89, 0x74, 0x24, 0x28, 0x48, 0x89, 0x6C, 0x24, 0x20, 0x4C, 0x8B, 0xCB, 0x45, 0x33, 0xC0, 0x33, 0xD2, 0xE8, XX4
+#endif
+        };
+        auto addr = MemDbg::findBytes(sig, sizeof(sig), processStartAddress, processStopAddress);
+        if (!addr)
+            return;
+        HookParam hp;
+        hp.address = addr;
+        hp.text_fun = [](hook_context *context, HookParam *hp, auto *buff, auto *split)
+        {
+            if (strcmp((char *)context->argof(2), "%s : %s") != 0)
+                return;
+            game_info.DISC_ID = (char *)context->argof(3);
+            game_info.TITLE = (char *)context->argof(4);
+            HostInfo(HOSTINFO::EmuGameName, "%s %s", context->argof(3), context->argof(4));
+            jitaddrclear();
+        };
+        NewHook(hp, "PPSSPPGameInfo");
+    }
+    void trygetgameinwindowtitle()
+    {
+        auto wininfos = get_proc_windows();
+        for (auto &&info : wininfos)
+        {
+            if (info.title.find(L'-') == info.title.npos)
+                continue;
+            auto title = WideStringToString(info.title.substr(info.title.find(L'-') + 2));
+            game_info.DISC_ID = title.substr(0, title.find(':') - 1);
+            game_info.TITLE = title.substr(title.find(':') + 2);
+            HostInfo(HOSTINFO::EmuGameName, "%s %s", game_info.DISC_ID.c_str(), game_info.TITLE.c_str());
+            return;
+        }
+    }
     bool hookPPSSPPDoJit()
     {
         auto DoJitPtr = getDoJitAddress();
-        if (DoJitPtr == 0)
+        if (!DoJitPtr)
             return false;
-        spDefault.jittype = JITTYPE::PPSSPP;
-        spDefault.minAddress = 0;
-        spDefault.maxAddress = -1;
+        trygetgameinwindowtitle();
+        Load_PSP_ISO_StringFromFormat();
         HookParam hp;
         hp.address = DoJitPtr; // Jit::DoJit
-        ConsoleOutput("DoJitPtr %p", DoJitPtr);
         hp.user_value = (uintptr_t) new uintptr_t;
-        hp.text_fun = [](hook_stack *stack, HookParam *hp, auto *, auto *)
+        hp.text_fun = [](hook_context *context, HookParam *hp, auto *, auto *)
         {
-            static auto once1 = oncegetJitBlockCache(stack);
-            auto em_address = stack->THISCALLARG1;
+            static auto once1 = oncegetJitBlockCache(context);
+            auto em_address = context->THISCALLARG1;
 
             *(uintptr_t *)(hp->user_value) = em_address;
 
             HookParam hpinternal;
             hpinternal.user_value = hp->user_value;
-            hpinternal.address = stack->retaddr;
-            hpinternal.text_fun = [](hook_stack *stack, HookParam *hp, auto *, auto *)
+            hpinternal.address = context->retaddr;
+            hpinternal.text_fun = [](hook_context *context, HookParam *hp, auto *, auto *)
             {
                 auto em_address = *(uintptr_t *)(hp->user_value);
                 if (!IsValidAddress(em_address))
                     return;
                 [&]()
                 {
-                    auto ret = stack->LASTRETVAL;
+                    auto ret = context->LASTRETVAL;
                     if (breakpoints.find(ret) != breakpoints.end())
                         return;
                     breakpoints.insert(ret);
@@ -520,90 +584,9 @@ namespace ppsspp
         return NewHook(hp, "PPSSPPDoJit");
     }
 }
-namespace
+bool PPSSPPWindows::attach_function()
 {
-    // ULJS00035 ULJS00149 流行り神
-    void *findGetPointer()
-    {
-        char GetPointer[] = "Unknown GetPointer %08x PC %08x LR %08x";
-        auto addr = MemDbg::findBytes(GetPointer, sizeof(GetPointer), processStartAddress, processStopAddress);
-        if (!addr)
-            return nullptr;
-        addr = findleapushaddr(addr);
-        return (void *)addr;
-    }
-    bool Replace_memcpy()
-    {
-        // static int Replace_memcpy() {
-        // 	u32 destPtr = PARAM(0);
-        // 	u32 srcPtr = PARAM(1);
-        // 	u32 bytes = PARAM(2);
-        static auto GetPointer = (void *(*)(uintptr_t))findGetPointer();
-        if (!GetPointer)
-            return false;
-        ConsoleOutput("GetPointer %p", GetPointer);
-        char ReplaceMemcpy_VideoDecodeRange[] = "ReplaceMemcpy/VideoDecodeRange";
-        auto addr = MemDbg::findBytes(ReplaceMemcpy_VideoDecodeRange, sizeof(ReplaceMemcpy_VideoDecodeRange), processStartAddress, processStopAddress);
-        if (!addr)
-            return false;
-        ConsoleOutput("ReplaceMemcpy/VideoDecodeRange %p", addr);
-#ifndef _WIN64
-        BYTE sig[] = {0xb9, XX4};
-        *(uintptr_t *)(sig + 1) = addr;
-        bool succ = false;
-        for (auto addr : Util::SearchMemory(sig, sizeof(sig), PAGE_EXECUTE, processStartAddress, processStopAddress))
-        {
-            BYTE sig1[] = {
-                0x55, 0x8b, 0xec,
-                0x81, 0xec, XX4,
-                0x8b, 0x0d, XX4};
-            addr = reverseFindBytes(sig1, sizeof(sig1), addr - 0x200, addr);
-            if (!addr)
-                continue;
-            DWORD off_106D180 = *(DWORD *)(addr + sizeof(sig1) - 4);
-            HookParam hp;
-            hp.user_value = *(DWORD *)off_106D180;
-#else
-        bool succ = false;
-        for (auto addr : MemDbg::findleaaddr_all(addr, processStartAddress, processStopAddress))
-        {
-            BYTE sig1[] = {
-                0x48, 0x89, XX, 0x24, 0x18,
-                0x48, 0x89, XX, 0x24, 0x20,
-                0x57,
-                0x48, 0x81, 0xec, XX4,
-                0x48, 0x8b, XX, XX4};
-            addr = reverseFindBytes(sig1, sizeof(sig1), addr - 0x200, addr);
-            if (!addr)
-                continue;
-            DWORD off_140F4C810 = *(DWORD *)(addr + sizeof(sig1) - 4);
-            HookParam hp;
-            hp.user_value = *(uintptr_t *)(off_140F4C810 + addr + sizeof(sig1));
-#endif
-            hp.address = addr;
-            hp.text_fun = [](hook_stack *stack, HookParam *hp, auto *buff, auto *split)
-            {
-                auto bytes = *((DWORD *)hp->user_value + 6);
-                auto srcPtr = GetPointer(*((DWORD *)hp->user_value + 5));
-
-                if (!IsShiftjisLeadByte(*(BYTE *)srcPtr))
-                    return;
-                if (bytes != 2)
-                    return;
-                if (bytes != strnlen((char *)srcPtr, TEXT_BUFFER_SIZE))
-                    return;
-                buff->from(srcPtr, bytes);
-            };
-            succ |= NewHook(hp, "Replace_memcpy");
-        }
-        return succ;
-    }
-}
-bool InsertPPSSPPcommonhooks()
-{
-
     auto succ = ppsspp::hookPPSSPPDoJit();
     succ |= InsertPPSSPPHLEHooks();
-    succ |= Replace_memcpy();
     return succ;
 }

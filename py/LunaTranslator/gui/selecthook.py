@@ -5,7 +5,6 @@ from traceback import print_exc
 import qtawesome, windows, winsharedutils, gobject
 from myutils.config import savehook_new_data, static_data, globalconfig, _TR, isascii
 from myutils.utils import checkchaos, get_time_stamp, dynamiclink, is_ascii_control
-from myutils.wrapper import Singleton_close
 from gui.dialog_savedgame import dialog_setting_game
 from gui.usefulwidget import (
     closeashidewindow,
@@ -28,6 +27,12 @@ from gui.dynalang import (
     LTabWidget,
     LCheckBox,
 )
+
+
+class HOSTINFO:
+    Console = 0
+    Warning = 1
+    EmuGameName = 2
 
 
 def getformlayoutw(w=None, cls=LFormLayout, hide=False):
@@ -156,7 +161,7 @@ class searchhookparam(LDialog):
             usestruct.boundaryModule = dumpvalues["module"][:120]
             usestruct.address_method = self.search_addr_range.idx()
             usestruct.search_method = self.search_method.idx()
-            usestruct.jittype = dumpvalues["jittype"]
+            usestruct.isjithook = bool(dumpvalues["isjithook"])
             if self.search_addr_range.idx() == 0:
                 usestruct.minAddress = self.safehex(
                     dumpvalues["startaddr"], usestruct.minAddress
@@ -337,7 +342,7 @@ class searchhookparam(LDialog):
 
         self.layoutsettings.addRow("搜索方式", _typelayout)
         _jitcombo = FocusCombo()
-        _jitcombo.addItems(["PC", "YUZU", "PPSSPP", "VITA3K", "RPCS3"])
+        _jitcombo.addItems(["PC", "JIT"])
         self.search_method = QButtonGroup_switch_widegt(self)
         _jitcombo.currentIndexChanged.connect(
             lambda idx: [
@@ -345,7 +350,7 @@ class searchhookparam(LDialog):
                 self.resize(self.width(), 1),
             ]
         )
-        self.regists["jittype"] = lambda: _jitcombo.currentIndex()
+        self.regists["isjithook"] = lambda: bool(_jitcombo.currentIndex())
 
         _typelayout.addRow("类型", _jitcombo)
 
@@ -385,11 +390,10 @@ class searchhookparam(LDialog):
 class hookselect(closeashidewindow):
     addnewhooksignal = pyqtSignal(tuple, bool, bool)
     getnewsentencesignal = pyqtSignal(str)
-    sysmessagesignal = pyqtSignal(str)
+    sysmessagesignal = pyqtSignal(int, str)
     removehooksignal = pyqtSignal(tuple)
     getfoundhooksignal = pyqtSignal(dict)
     update_item_new_line = pyqtSignal(tuple, str)
-    warning = pyqtSignal(str)
 
     SaveTextThreadRole = Qt.ItemDataRole.UserRole + 1
 
@@ -403,16 +407,8 @@ class hookselect(closeashidewindow):
         self.sysmessagesignal.connect(self.sysmessage)
         self.update_item_new_line.connect(self.update_item_new_line_function)
         self.getfoundhooksignal.connect(self.getfoundhook)
-        self.warning.connect(self.warningf)
         self.setWindowTitle("选择文本")
         self.changeprocessclear()
-
-    def warningf(self, text):
-        getQMessageBox(
-            self,
-            "警告",
-            text,
-        )
 
     def querykeyofrow(self, row):
         if isinstance(row, QModelIndex):
@@ -558,7 +554,9 @@ class hookselect(closeashidewindow):
         self.widget = QWidget()
 
         self.setCentralWidget(self.widget)
-        self.setWindowIcon(qtawesome.icon(globalconfig["toolbutton"]["buttons"]["selecttext"]["icon"]))
+        self.setWindowIcon(
+            qtawesome.icon(globalconfig["toolbutton"]["buttons"]["selecttext"]["icon"])
+        )
         self.hboxlayout = QHBoxLayout()
         self.widget.setLayout(self.hboxlayout)
         self.vboxlayout = QVBoxLayout()
@@ -685,10 +683,16 @@ class hookselect(closeashidewindow):
         menu.addAction(remove)
         menu.addAction(copy)
         action = menu.exec(self.tttable.cursor().pos())
-        hc, _, tp = self.querykeyofrow(index)
+        hc, hn, tp = self.querykeyofrow(index)
         if action == remove:
             gobject.baseobject.textsource.Luna_RemoveHook(tp.processId, tp.addr)
-
+            if hn[:8] == "UserHook":
+                try:
+                    savehook_new_data[gobject.baseobject.gameuid][
+                        "needinserthookcode"
+                    ].remove(hc)
+                except:
+                    pass
         elif action == copy:
             winsharedutils.clipboard_set(hc)
 
@@ -862,11 +866,19 @@ class hookselect(closeashidewindow):
         if atBottom:
             scrollbar.setValue(scrollbar.maximum())
 
-    def sysmessage(self, sentence):
-
-        self.textbrowappendandmovetoend(
-            self.sysOutput, get_time_stamp() + " " + sentence
-        )
+    def sysmessage(self, info, sentence):
+        if info == HOSTINFO.Console:
+            self.textbrowappendandmovetoend(
+                self.sysOutput, get_time_stamp() + " " + sentence
+            )
+        elif info == HOSTINFO.Warning:
+            getQMessageBox(
+                self,
+                "警告",
+                sentence,
+            )
+        elif info == HOSTINFO.EmuGameName:
+            gobject.baseobject.displayinfomessage(sentence, "<msg_info_refresh>")
 
     def getnewsentence(self, sentence):
         if self.at1 == 2:

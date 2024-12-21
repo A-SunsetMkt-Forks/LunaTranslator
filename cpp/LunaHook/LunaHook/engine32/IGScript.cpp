@@ -16,17 +16,17 @@ namespace
     StringReplacer(buffer, "\x83\x46", 2, "\xa1\xaf", 2); // ’
   }
   template <int arg>
-  void SpecialHookigi(hook_stack *stack, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
+  void SpecialHookigi(hook_context *context, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
   {
-    DWORD Src = stack->stack[arg];
-    DWORD Size = stack->stack[arg + 1];
+    DWORD Src = context->stack[arg];
+    DWORD Size = context->stack[arg + 1];
     if (strlen((char *)Src) <= 2)
       return;
     if (strlen((char *)Src) >= Size)
       return;
     if (strlen((char *)Src) < Size - 4)
       return;
-    buffer->from_cs((char *)Src);
+    buffer->from((char *)Src);
     // ConsoleOutput(WideStringToString(StringToWideString((char*)Src,936).value()).c_str());
     // std::string xx;
     // for(int i=0;i<*len;i++){
@@ -156,7 +156,7 @@ namespace
 
     HookParam hp;
     hp.address = addr + 1;
-    hp.offset = get_stack(1);
+    hp.offset = stackoffset(1);
     hp.padding = 0x04;
     hp.type = USING_STRING;
     hp.filter_fun = LucaSystemFilter;

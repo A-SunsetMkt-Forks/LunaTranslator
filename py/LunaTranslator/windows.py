@@ -53,6 +53,7 @@ from ctypes.wintypes import (
     USHORT,
 )
 
+HRESULT = LONG
 HWINEVENTHOOK = HANDLE
 LRESULT = LPLONG
 WAIT_TIMEOUT = 258
@@ -152,6 +153,8 @@ VK_SHIFT = 0x10
 VK_CONTROL = 0x11
 VK_MENU = 0x12
 
+WM_KEYDOWN = 0x0100
+WM_KEYUP = 0x0101
 
 WNDENUMPROC = WINFUNCTYPE(c_bool, c_void_p, c_void_p)
 
@@ -857,7 +860,7 @@ IsZoomed = _user32.IsZoomed
 IsZoomed.argtypes = (HWND,)
 IsZoomed.restype = BOOL
 
-WNDPROCTYPE = CFUNCTYPE(INT, HWND, INT, WPARAM, LPARAM)
+WNDPROCTYPE = WINFUNCTYPE(INT, HWND, INT, WPARAM, LPARAM)
 
 GWLP_WNDPROC = -4
 if sizeof(c_void_p) == 8:
@@ -871,6 +874,7 @@ SetWindowLongPtr.restype = c_void_p
 GetWindowLongPtr.argtypes = HWND, INT
 GetWindowLongPtr.restype = c_void_p
 WM_LBUTTONDOWN = 0x0201
+WM_COMMAND = 0x0111
 WM_LBUTTONUP = 0x0202
 WM_MOUSEMOVE = 0x0200
 
@@ -916,7 +920,7 @@ def MonitorFromWindow(hwnd, dwFlags=MONITOR_DEFAULTTONEAREST):
     return _MonitorFromWindow(hwnd, dwFlags)
 
 
-WINEVENTPROC = CFUNCTYPE(
+WINEVENTPROC = WINFUNCTYPE(
     None,
     HANDLE,
     DWORD,
@@ -959,3 +963,23 @@ SetWinEventHook.argtypes = DWORD, DWORD, HMODULE, WINEVENTPROC, DWORD, DWORD, DW
 PathFileExists = windll.Shlwapi.PathFileExistsW
 PathFileExists.argtypes = (LPCWSTR,)
 PathFileExists.restype = BOOL
+
+_SHGetFolderPathW = _shell32.SHGetFolderPathW
+_SHGetFolderPathW.argtypes = (
+    HWND,
+    c_int,
+    HANDLE,
+    DWORD,
+    LPWSTR,
+)
+_SHGetFolderPathW.restype = HRESULT
+CSIDL_MYPICTURES = 0x27
+SHGFP_TYPE_CURRENT = 0
+S_OK = 0
+
+
+def SHGetFolderPathW(csidl):
+    buff = create_unicode_buffer(MAX_PATH + 100)
+    if _SHGetFolderPathW(None, csidl, None, SHGFP_TYPE_CURRENT, buff) != S_OK:
+        return None
+    return buff.value

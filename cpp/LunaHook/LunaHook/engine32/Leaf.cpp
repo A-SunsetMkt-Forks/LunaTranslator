@@ -371,9 +371,9 @@ namespace
   std::string save;
   int role;
 }
-static void SpecialHookLeaf(hook_stack *stack, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
+static void SpecialHookLeaf(hook_context *context, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
 {
-  DWORD text = stack->ebx - 1; // = ebx -1
+  DWORD text = context->ebx - 1; // = ebx -1
   save = std::string((LPSTR)text, ::strlen((LPCSTR)text));
   *split = FIXED_SPLIT_VALUE; // only caller's address use as split
   buffer->from(save);
@@ -390,14 +390,13 @@ static void LeafFilter(TextBuffer *buffer, HookParam *)
 }
 namespace
 {
-  void hook2(hook_stack *stack, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
+  void hook2(hook_context *context, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
   {
     strReplace(save, "\\k", "");
-    static std::regex rx("<R(.+?)\\|.+>");
-    save = std::regex_replace(save, rx, "$1");
+    save = std::regex_replace(save, std::regex("<R(.+?)\\|.+>"), "$1");
     buffer->from(save);
   }
-  void hook2a(hook_stack *s, TextBuffer buffer)
+  void hook2a(hook_context *s, TextBuffer buffer)
   {
     s->ecx = (DWORD)allocateString(buffer.viewA());
   }
@@ -435,7 +434,7 @@ bool InsertLeafHook()
 
   HookParam hp;
   hp.address = addr + addr_offset;
-  // hp.offset=get_reg(regs::eax);
+  // hp.offset=regoffset(eax);
   hp.type = USING_STRING | USING_SPLIT; // use top of the stack as split
   hp.text_fun = SpecialHookLeaf;
   hp.filter_fun = LeafFilter; // remove two characters
@@ -456,14 +455,14 @@ bool InsertLeafHook()
   // 这个会卡死，无解
   //  hp.address=addr1+7;
   //  hp.hook_before=Private::hook1;
-  //  hp.hook_after=Private::hookafterbf;
+  //  hp.embed_fun=Private::hookafterbf;
   //  hp.type=EMBED_ABLE;
   // NewHook(hp,"EmbedLeaf");
   hp1.address = addr2 + 7;
   hp1.text_fun = hook2;
-  hp1.hook_after = hook2a;
+  hp1.embed_fun = hook2a;
   hp1.type = EMBED_ABLE | EMBED_DYNA_SJIS | NO_CONTEXT;
-  hp1.newlineseperator = L"\\n";
+  hp1.lineSeparator = L"\\n";
   succ |= NewHook(hp1, "EmbedLeaf");
   return succ;
 }
@@ -490,7 +489,7 @@ bool activehook()
     return false;
   HookParam hp;
   hp.address = addr;
-  hp.offset = get_reg(regs::ecx);
+  hp.offset = regoffset(ecx);
   hp.type = USING_STRING;
   return NewHook(hp, "active");
 }
@@ -537,7 +536,7 @@ bool InsertAquaplus1Hook()
 
   HookParam hp;
   hp.address = addr + 1;
-  hp.offset = get_stack(2);
+  hp.offset = stackoffset(2);
   hp.type = USING_STRING;
   hp.filter_fun = AquaplusFilter;
   return NewHook(hp, "Aquaplus1");
@@ -566,9 +565,9 @@ bool InsertAquaplus2Hook()
 
   HookParam hp;
   hp.address = addr;
-  hp.offset = get_reg(regs::ebx);
+  hp.offset = regoffset(ebx);
   hp.index = 0;
-  hp.split = get_reg(regs::esp);
+  hp.split = regoffset(esp);
   hp.split_index = 0;
   hp.type = USING_STRING | NO_CONTEXT | USING_SPLIT | CODEC_UTF8;
   hp.filter_fun = AquaplusFilter;
@@ -594,7 +593,7 @@ bool InsertAquaplus3Hook()
     return false;
   HookParam hp;
   hp.address = addr + 1;
-  hp.offset = get_reg(regs::eax);
+  hp.offset = regoffset(eax);
   hp.type = CODEC_UTF8 | USING_STRING | NO_CONTEXT;
   hp.filter_fun = NewLineCharToSpaceFilterA;
   return NewHook(hp, "Aquaplus3");
@@ -637,13 +636,13 @@ namespace
     hp.offset = 0x34;
     hp.type = USING_STRING;
 
-    hp.text_fun = [](hook_stack *stack, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
+    hp.text_fun = [](hook_context *context, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
     {
       static std::unordered_map<uintptr_t, std::string> last;
-      auto ret = stack->stack[0];
+      auto ret = context->stack[0];
       if (last.find(ret) == last.end())
         last[ret] = "";
-      auto current = std::string((char *)stack->stack[13]);
+      auto current = std::string((char *)context->stack[13]);
       if (last[ret] == current)
         return;
       last[ret] = current;
@@ -769,9 +768,9 @@ namespace
       return false;
     HookParam hp;
     hp.address = addr;
-    hp.offset = get_stack(1);
+    hp.offset = stackoffset(1);
     hp.type = USING_STRING | NO_CONTEXT | EMBED_ABLE | EMBED_DYNA_SJIS | EMBED_AFTER_NEW;
-    hp.newlineseperator = L"\\n";
+    hp.lineSeparator = L"\\n";
     hp.filter_fun = AquaplusFilter;
     return NewHook(hp, "wa2special");
   }

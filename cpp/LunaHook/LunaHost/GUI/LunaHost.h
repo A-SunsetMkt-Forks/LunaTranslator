@@ -29,6 +29,7 @@ class Settingwindow : public mainwindow
     gridlayout *mainlayout;
     lineedit *showfont;
     button *selectfont;
+    combobox *language;
 
 public:
     Settingwindow(LunaHost *);
@@ -78,17 +79,6 @@ public:
     Hooksearchsetting(mainwindow *);
     void call(std::set<DWORD> pids, std::wstring);
 };
-class Hooksearchwindow : public mainwindow
-{
-    checkbox *cjkcheck;
-    button *hs_default, *hs_text, *hs_user;
-    gridlayout *layout;
-    Hooksearchsetting *hooksearchsetting = 0;
-    HooksearchText *hooksearchText = 0;
-
-public:
-    Hooksearchwindow(LunaHost *parent);
-};
 class LunaHost : public mainwindow
 {
     Pluginwindow *pluginwindow = 0;
@@ -102,13 +92,11 @@ class LunaHost : public mainwindow
     multilineedit *g_showtexts;
     button *g_selectprocessbutton;
     button *btndetachall;
-    button *btnsearchhooks;
     button *btnshowsettionwindow;
     // button* btnsavehook;
     processlistwindow *_processlistwindow = 0;
     Settingwindow *settingwindow = 0;
     Pluginmanager *plugins;
-    Hooksearchwindow *hooksearchwindow = 0;
     std::atomic<bool> hasstoped = false;
     bool on_text_recv(TextThread &thread, std::wstring &sentence);
     void on_text_recv_checkissaved(TextThread &thread);
@@ -116,7 +104,7 @@ class LunaHost : public mainwindow
     void on_thread_delete(TextThread &thread);
     void on_proc_connect(DWORD pid);
     void on_proc_disconnect(DWORD pid);
-    void on_warning(const std::wstring &);
+    void on_info(HOSTINFO type, const std::wstring &);
 
     void showtext(const std::wstring &text, bool clear);
     void updatelisttext(const std::wstring &text, LONG_PTR data);
@@ -135,7 +123,6 @@ public:
     void on_close();
     LunaHost();
     friend class Settingwindow;
-    friend class Hooksearchwindow;
 
 private:
     void loadsettings();

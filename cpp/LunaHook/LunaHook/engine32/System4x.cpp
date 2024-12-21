@@ -136,8 +136,8 @@ static bool InsertSystem43OldHook(ULONG startAddress, ULONG stopAddress, LPCSTR 
 
   HookParam hp;
   hp.address = addr + addr_offset;
-  hp.offset = get_stack(1);
-  hp.split = get_reg(regs::esp);
+  hp.offset = stackoffset(1);
+  hp.split = regoffset(esp);
   hp.type = NO_CONTEXT | USING_SPLIT | USING_STRING | EMBED_ABLE | EMBED_AFTER_NEW | EMBED_DYNA_SJIS;
   ConsoleOutput("INSERT System43");
   ConsoleOutput("System43: disable GDI hooks"); // disable hooking to TextOutA, which is cached
@@ -855,35 +855,19 @@ static bool InsertSystem43NewHook(ULONG startAddress, ULONG stopAddress, LPCSTR 
       0x51,                   // 004eeb43   51               push ecx
       0xe8                    //, XX4,           // 004eeb44   e8 42dc1900      call .0068c78b
   };
-  enum
-  {
-    addr_offset = 0
-  };
   ULONG addr = MemDbg::findBytes(bytes, sizeof(bytes), processStartAddress, processStopAddress);
   // GROWL_DWORD(addr);
   if (!addr)
-  {
-    ConsoleOutput("System43+: pattern not found");
     return false;
-  }
-
-  // addr = *(DWORD *)(addr+1) + addr + 5; // change to hook to the actual address of function being called
-
   HookParam hp;
   hp.address = addr;
   hp.type = NO_CONTEXT | USING_STRING | USING_SPLIT | SPLIT_INDIRECT;
   // hp.type = NO_CONTEXT|USING_STRING|FIXING_SPLIT;
   hp.split_index = 0x10; // use [[esp]+0x10] to differentiate name and thread
 
-  // Only name can be modified here, where the value of split is 0x6, and text in 0x2
-
-  ConsoleOutput("INSERT System43+");
-
-  ConsoleOutput("System43+: disable GDI hooks"); // disable hooking to TextOutA, which is cached
-
   return NewHook(hp, hookName);
 }
-void System43New2Filter(TextBuffer *buffer, HookParam *)
+void System43aFilter(TextBuffer *buffer, HookParam *)
 {
   auto text = reinterpret_cast<LPSTR>(buffer->buff);
 
@@ -895,7 +879,7 @@ void System43New2Filter(TextBuffer *buffer, HookParam *)
   }
 }
 
-bool InsertSystem43New2Hook()
+bool InsertSystem43aHook()
 {
 
   /*
@@ -910,30 +894,47 @@ bool InsertSystem43New2Hook()
       0x57,                   // push edi
       0xC6, 0x06, 0x00        // mov byte ptr [esi],00   << hook here
   };
-  enum
-  {
-    addr_offset = sizeof(bytes) - 3
+  ULONG addr = MemDbg::findBytes(bytes, sizeof(bytes), processStartAddress, processStopAddress);
+  if (!addr)
+    return false;
+  HookParam hp;
+  hp.address = addr + sizeof(bytes) - 3;
+  hp.offset = regoffset(edx);
+  hp.split = regoffset(esp);
+  hp.type = NO_CONTEXT | USING_STRING | USING_SPLIT;
+  hp.filter_fun = System43aFilter;
+  return NewHook(hp, "System43new");
+}
+
+bool InsertSystem43bHook()
+{
+  /*
+   * Sample games:
+   * https://vndb.org/v10732
+   */
+  const BYTE bytes[] = {
+      0x8B, 0xCE,             // mov ecx,esi            << hook here
+      0xE8, XX4,              // call Oyakorankan.exe+13D890
+      0x8B, 0x43, 0x04,       // mov eax,[ebx+04]
+      0x8D, 0x4C, 0x24, 0x10, // lea ecx,[esp+10]
+      0x3B, 0xC8,             // cmp ecx,eax
+      0x73, 0x64              // jae Oyakorankan.exe+1403B2
   };
 
-  ULONG range = min(processStopAddress - processStartAddress, MAX_REL_ADDR);
-  ULONG addr = MemDbg::findBytes(bytes, sizeof(bytes), processStartAddress, processStartAddress + range);
+  ULONG addr = MemDbg::findBytes(bytes, sizeof(bytes), processStartAddress, processStopAddress);
   if (!addr)
-  {
-    ConsoleOutput("System43new: pattern not found");
     return false;
-  }
-  HookParam hp;
-  hp.address = addr + addr_offset;
-  hp.offset = get_reg(regs::edx);
-  hp.split = get_reg(regs::esp);
-  hp.type = NO_CONTEXT | USING_STRING | USING_SPLIT;
-  hp.filter_fun = System43New2Filter;
-  ConsoleOutput("INSERT System43new");
-  return NewHook(hp, "System43new");
+  HookParam hp = {};
+  hp.address = addr;
+  hp.offset = regoffset(edx);
+  hp.split = stackoffset(12);
+  hp.type = USING_STRING | USING_SPLIT;
+  NewHook(hp, "System43b");
+  return true;
 }
 bool InsertSystem43Hook()
 {
-  if (InsertSystem43New2Hook())
+  if (InsertSystem43aHook() || InsertSystem43bHook())
     return true;
   // bool patched = Util::CheckFile(L"AliceRunPatch.dll");
   bool patched = ::GetModuleHandleA("AliceRunPatch.dll");
@@ -1030,7 +1031,7 @@ namespace
        *  005D6FA0   8B1C98           MOV EBX,DWORD PTR DS:[EAX+EBX*4]
        */
       std::unordered_set<uint64_t> hashes_;
-      void hookafter2(hook_stack *s, TextBuffer buffer)
+      void hookafter2(hook_context *s, TextBuffer buffer)
       {
         auto newData = buffer.strA();
         static std::string data_;
@@ -1045,7 +1046,7 @@ namespace
 
         hashes_.insert(simplehash::hashCharArray(arg->text));
       }
-      void hookBefore(hook_stack *s, HookParam *hp, TextBuffer *buffer, uintptr_t *role)
+      void hookBefore(hook_context *s, HookParam *hp, TextBuffer *buffer, uintptr_t *role)
       {
         static std::string data_; // persistent storage, which makes this function not thread-safe
 
@@ -1079,9 +1080,9 @@ namespace
           else if (split >= 2 && split <= 0x14 && split != 3 && split != 0xb || split == 0x22)
             *role = Engine::ScenarioRole;
         }
-        buffer->from_cs(arg->text);
+        buffer->from(arg->text);
       }
-      void hookAfter(hook_stack *stack, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
+      void hookAfter(hook_context *context, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
       {
         if (arg_)
         {
@@ -1423,7 +1424,7 @@ namespace
         hp.address = addr;
         hp.type = EMBED_ABLE | EMBED_DYNA_SJIS | NO_CONTEXT;
         hp.text_fun = Private::hookBefore;
-        hp.hook_after = Private::hookafter2;
+        hp.embed_fun = Private::hookafter2;
         auto succ = NewHook(hp, "EmbedSysmtem44");
         hp.address = addr + 5;
         hp.text_fun = Private::hookAfter;
@@ -1528,7 +1529,7 @@ namespace
   class ScenarioHook43 : protected TextHookBase
   {
   public:
-    bool hookBefore(hook_stack*s,void* data, size_t* len,uintptr_t*role)
+    bool hookBefore(hook_context*s,void* data, size_t* len,uintptr_t*role)
     {
       // See ATcode patch:
       // 0070A12E   8B87 B0000000    MOV EAX,DWORD PTR DS:[EDI+0xB0]
@@ -1568,7 +1569,7 @@ namespace
       return write_string_overwrite(data,len,text);
     }
 
-    bool hookAfter(hook_stack*s,void* data, size_t* len,uintptr_t*role)
+    bool hookAfter(hook_context*s,void* data, size_t* len,uintptr_t*role)
     {
       if (arg_) {
         arg_->text = text_;
@@ -1582,7 +1583,7 @@ namespace
   class OtherHook43 : protected TextHookBase
   {
   public:
-    bool hookBefore(hook_stack*s,void* data, size_t* len,uintptr_t*role)
+    bool hookBefore(hook_context*s,void* data, size_t* len,uintptr_t*role)
     {
       if (!enabled_)
         return false;
@@ -1606,7 +1607,7 @@ namespace
       return write_string_overwrite(data,len,text);
     }
 
-    bool hookAfter(hook_stack*s,void* data, size_t* len,uintptr_t*role)
+    bool hookAfter(hook_context*s,void* data, size_t* len,uintptr_t*role)
     {
       if (arg_) {
         arg_->text = text_;
@@ -1618,7 +1619,7 @@ namespace
   };
 
   // Text with fixed size
-  bool fixedTextHook(hook_stack*s,void* data, size_t* len,uintptr_t*role)
+  bool fixedTextHook(hook_context*s,void* data, size_t* len,uintptr_t*role)
   {
     enum { FixedSize = 0x10 };
     struct FixedArgument // first argument of the name hook
@@ -1743,8 +1744,8 @@ namespace
 
     HookParam hp;
     hp.address = addr;
-    hp.offset = get_reg(regs::edx);
-    hp.split = get_reg(regs::esp);
+    hp.offset = regoffset(edx);
+    hp.split = regoffset(esp);
     hp.type = NO_CONTEXT | USING_STRING | USING_SPLIT;
     hp.filter_fun = System42Filter;
     ConsoleOutput("INSERT System42");

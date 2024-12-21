@@ -3,7 +3,6 @@ import os, platform, functools, uuid, json, math, csv, io, pickle
 from traceback import print_exc
 import windows, qtawesome, winsharedutils, gobject
 from webviewpy import webview_native_handle_kind_t, Webview
-from winsharedutils import HTMLBrowser
 from myutils.config import _TR, globalconfig, _TRL
 from myutils.wrapper import Singleton_close, tryprint
 from myutils.utils import nowisdark, checkportavailable, checkisusingwine
@@ -1163,6 +1162,9 @@ class abstractwebview(QWidget):
     def navigate(self, url):
         pass
 
+    def add_menu(self, index, label, callback):
+        pass
+
     #
     def parsehtml(self, html):
         pass
@@ -1245,6 +1247,8 @@ class WebivewWidget(abstractwebview):
         winsharedutils.remove_WebMessageReceived(
             self.get_controller(), self.m_webMessageReceivedToken
         )
+        for m in self.addmenu_infos:
+            winsharedutils.remove_ContextMenuRequested(self.get_controller(), m)
 
     def bind(self, fname, func):
         self.webview.bind(fname, func)
@@ -1262,9 +1266,20 @@ class WebivewWidget(abstractwebview):
             webview_native_handle_kind_t.WEBVIEW_NATIVE_HANDLE_KIND_UI_WIDGET
         )
 
+    def add_menu(self, index, label, callback):
+        __ = winsharedutils.add_ContextMenuRequested_cb(callback)
+        self.callbacks.append(__)
+        self.addmenu_infos.append(
+            winsharedutils.add_ContextMenuRequested(
+                self.get_controller(), index, label, __
+            )
+        )
+
     def __init__(self, parent=None, debug=True, usedarklight=True) -> None:
         super().__init__(parent)
         self.webview = None
+        self.callbacks = []
+        self.addmenu_infos = []
         self.webview = Webview(debug=debug, window=int(self.winId()))
         self.m_webMessageReceivedToken = None
         self.zoomfunc = winsharedutils.add_ZoomFactorChanged_CALLBACK(
@@ -1288,6 +1303,8 @@ class WebivewWidget(abstractwebview):
             t.timeout.connect(self.__darkstatechecker)
             t.timeout.emit()
             t.start()
+
+        self.add_menu(0, "", lambda _: None)
 
     def __darkstatechecker(self):
         dl = globalconfig["darklight2"]
@@ -1439,38 +1456,81 @@ class QWebWrap(abstractwebview):
 
 
 class mshtmlWidget(abstractwebview):
+    CommandBase = 10086
+
+    def bindhelper(self, func, ppwc, argc):
+        argv = []
+        for i in range(argc):
+            argv.append(ppwc[argc - 1 - i])
+        func(*argv)
+
+    def bind(self, fname, func):
+        __f = winsharedutils.html_bind_function_FT(
+            functools.partial(self.bindhelper, func)
+        )
+        self.bindfs.append(__f)
+        winsharedutils.html_bind_function(self.browser, fname, __f)
+
+    def __del__(self):
+        if not self.browser:
+            return
+        winsharedutils.html_release(self.browser)
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
+        self.callbacks = {}
+        self.bindfs = []
         iswine = checkisusingwine()
-        if iswine or (HTMLBrowser.version() < 10001):  # ie10之前，sethtml会乱码
+        if iswine or (winsharedutils.html_version() < 10001):  # ie10之前，sethtml会乱码
             self.html_limit = 0
-        self.browser = HTMLBrowser(int(self.winId()))
+        self.browser = winsharedutils.html_new(int(self.winId()))
         self.curr_url = None
         t = QTimer(self)
         t.setInterval(100)
         t.timeout.connect(self.__getcurrenturl)
         t.timeout.emit()
         t.start()
+        self.add_menu(0, _TR("复制"), winsharedutils.clipboard_set)
+        self.add_menu(0, None, lambda: 1)
+
+        self.wndproc = windows.WNDPROCTYPE(
+            functools.partial(
+                self.extrahandle,
+                windows.GetWindowLongPtr(int(self.winId()), windows.GWLP_WNDPROC),
+            )
+        )
+        windows.SetWindowLongPtr(int(self.winId()), windows.GWLP_WNDPROC, self.wndproc)
+
+    def extrahandle(self, orig, hwnd, msg, wp, lp):
+        if msg == windows.WM_COMMAND:
+            func = self.callbacks.get(wp)
+            if func:
+                func(winsharedutils.html_get_select_text(self.browser))
+        return windows.WNDPROCTYPE(orig)(hwnd, msg, wp, lp)
 
     def __getcurrenturl(self):
-        _u = self.browser.get_current_url()
+        _u = winsharedutils.html_get_current_url(self.browser)
         if self.curr_url != _u:
             self.curr_url = _u
             self.on_load.emit(_u)
 
     def navigate(self, url):
-        self.browser.navigate(url)
+        winsharedutils.html_navigate(self.browser, url)
 
     def resizeEvent(self, a0: QResizeEvent) -> None:
         size = a0.size() * self.devicePixelRatioF()
-        self.browser.resize(0, 0, size.width(), size.height())
+        winsharedutils.html_resize(self.browser, 0, 0, size.width(), size.height())
 
     def setHtml(self, html):
-        self.browser.set_html(html)
+        winsharedutils.html_set_html(self.browser, html)
 
     def parsehtml(self, html):
         return self._parsehtml_codec(self._parsehtml_font(self._parsehtml_dark(html)))
+
+    def add_menu(self, index, label, callback):
+        command = mshtmlWidget.CommandBase + len(self.callbacks)
+        self.callbacks[command] = callback
+        winsharedutils.html_add_menu(self.browser, index, command, label)
 
 
 class CustomKeySequenceEdit(QKeySequenceEdit):
@@ -1511,6 +1571,14 @@ class auto_select_webview(QWidget):
     on_load = pyqtSignal(str)
     on_ZoomFactorChanged = pyqtSignal(float)
 
+    def bind(self, funcname, function):
+        self.bindinfo.append((funcname, function))
+        self.internal.bind(funcname, function)
+
+    def add_menu(self, index, label, callback):
+        self.addmenuinfo.append((index, label, callback))
+        self.internal.add_menu(index, label, callback)
+
     def clear(self):
         self.lastaction = None
         self.internal.clear()
@@ -1541,6 +1609,8 @@ class auto_select_webview(QWidget):
 
     def __init__(self, parent, dyna=False) -> None:
         super().__init__(parent)
+        self.addmenuinfo = []
+        self.bindinfo = []
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.internal = None
         layout = QHBoxLayout()
@@ -1575,16 +1645,18 @@ class auto_select_webview(QWidget):
                 self.navigate(arg)
             elif action == 1:
                 self.setHtml(arg)
+        for _ in self.addmenuinfo:
+            self.internal.add_menu(*_)
+        for _ in self.bindinfo:
+            self.internal.bind(*_)
 
     def _createwebview(self):
         contex = globalconfig["usewebview"]
         try:
             if contex == 0:
                 browser = mshtmlWidget()
-            elif contex == 1:
+            else:
                 browser = WebivewWidget()
-            elif contex == 2:
-                browser = QWebWrap()
         except:
             print_exc()
             browser = mshtmlWidget()
@@ -1759,7 +1831,7 @@ def automakegrid(grid: QGridLayout, lis, save=False, savelist=None):
             elif len(item) == 3:
                 wid, cols, arg = item
                 if type(wid) == str:
-                    wid = LLabel(wid)
+                    wid = QLabel(wid)
                     if arg == "link":
                         wid.setOpenExternalLinks(True)
                 elif arg == "group":
@@ -2043,8 +2115,7 @@ class listediter(LDialog):
             dedump.add(k)
         if self.closecallback:
             after = pickle.dumps(self.lst)
-            if before != after:
-                self.closecallback()
+            self.closecallback(before != after)
 
     def __cb(self, paths):
         if isinstance(paths, str):
@@ -2144,8 +2215,9 @@ class listediterline(QWidget):
             self.edit.setReadOnly(True)
             self.edit.clicked.connect(callback)
 
-    def callback(self):
-        self.setText("|".join(self.reflist))
+    def callback(self, changed):
+        if changed:
+            self.setText("|".join(self.reflist))
         if self.directedit:
             self.edit.setReadOnly(False)
 
@@ -2442,3 +2514,50 @@ class LRButton(LPushButton):
             if ev.button() == Qt.MouseButton.RightButton:
                 self.rightclick.emit()
         return super().mouseReleaseEvent(ev)
+
+
+class VisLFormLayout(LFormLayout):
+    # 简易实现
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._row_widgets = {}
+        self._reverse = {}
+        self._row_vis = {}
+
+    def addRow(self, label_or_field, field=None):
+        row_index = self.rowCount()
+        if field is None:
+            super().addRow(label_or_field)
+            field = label_or_field
+            label_or_field = None
+        else:
+            super().addRow(label_or_field, field)
+        self._row_widgets[row_index] = (label_or_field, field)
+        self._row_vis[row_index] = True
+        self._reverse[field] = row_index
+        return row_index
+
+    def setRowVisible(self, row_index, visible):
+        if isinstance(row_index, int):
+            pass
+        elif isinstance(row_index, QWidget):
+            row_index = self._reverse[row_index]
+        if self._row_vis[row_index] == visible:
+            return
+        insert_position = sum(1 for i in range(row_index) if self._row_vis[i])
+        if visible:
+            label, field = self._row_widgets[row_index]
+            if label is not None:
+                super().insertRow(insert_position, label, field)
+            else:
+                super().insertRow(insert_position, field)
+            if not field.isVisible():
+                field.setVisible(True)
+        else:
+            tres = self.takeRow(insert_position)
+            label = tres.labelItem
+            if label is not None:
+                self.removeItem(label)
+                label.widget().deleteLater()
+            tres.fieldItem.widget().hide()
+        self._row_vis[row_index] = visible

@@ -96,7 +96,7 @@ namespace
 			hp.type |= USING_STRING | CODEC_UTF16;
 			break;
 		case L'M':
-			hp.type |= USING_STRING | CODEC_UTF16 | SPECIAL_JIT_STRING;
+			hp.type |= USING_STRING | CODEC_UTF16 | CSHARP_STRING;
 			break;
 		case L'U':
 			hp.type |= USING_STRING | CODEC_UTF32;
@@ -186,14 +186,11 @@ namespace
 				return {};
 			HCode.erase(0, 1);
 			HCode = HCode.substr(0, HCode.size() - wcslen(L":JIT:UNITY"));
-			hp.argidx = hp.offset;
-			hp.offset = 0;
 			hp.address = 0;
 			hp.type &= ~MODULE_OFFSET;
 			hp.type &= ~FUNCTION_OFFSET;
-			strcpy(hp.function, "");
 			wcscpy(hp.module, L"");
-			strcpy(hp.unityfunctioninfo, wcasta(HCode).c_str());
+			strcpy(hp.function, wcasta(HCode).c_str());
 		}
 		else
 		{
@@ -223,8 +220,6 @@ namespace
 			if (hp.jittype != JITTYPE::PC)
 			{
 				hp.emu_addr = hp.address;
-				hp.argidx = hp.offset;
-				hp.offset = 0;
 				hp.address = 0;
 				hp.type &= ~MODULE_OFFSET;
 				hp.type &= ~FUNCTION_OFFSET;
@@ -299,7 +294,7 @@ namespace
 		{
 			HCode += L"E";
 
-			if (hp.hook_after)
+			if (hp.embed_fun)
 				HCode += L'X';
 			else
 			{
@@ -318,7 +313,7 @@ namespace
 
 		if (hp.type & USING_STRING)
 		{
-			if (hp.type & SPECIAL_JIT_STRING)
+			if (hp.type & CSHARP_STRING)
 				HCode += L'M';
 			else if (hp.type & CODEC_UTF16)
 				HCode += L'Q';
@@ -363,14 +358,7 @@ namespace
 		if (hp.split < 0)
 			hp.split += 4;
 
-		if (hp.jittype == JITTYPE::PC)
-		{
-			HCode += HexString(hp.offset);
-		}
-		else
-		{
-			HCode += HexString(hp.argidx);
-		}
+		HCode += HexString(hp.offset);
 
 		if (hp.type & DATA_INDIRECT)
 			HCode += L'*' + HexString(hp.index);
@@ -403,7 +391,7 @@ namespace
 			if (hp.jittype == JITTYPE::UNITY)
 			{
 				HCode += L'@';
-				HCode += acastw(hp.unityfunctioninfo);
+				HCode += acastw(hp.function);
 				HCode += L":JIT:UNITY";
 			}
 			else

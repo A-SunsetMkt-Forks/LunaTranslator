@@ -1,7 +1,7 @@
 #include "host.h"
 typedef LONG NTSTATUS;
 #include "yapi.hpp"
-#include "Lang/Lang.h"
+#define SEARCH_SJIS_UNSAFE 0
 namespace
 {
 	class ProcessRecord
@@ -49,10 +49,10 @@ namespace
 
 	Host::ProcessEventHandler OnConnect, OnDisconnect;
 	Host::ThreadEventHandler OnCreate, OnDestroy;
-	Host::ConsoleHandler OnConsole = 0;
-	Host::ConsoleHandler OnWarning = 0;
+	Host::HostInfoHandler OnHostInfo = 0;
 	Host::HookInsertHandler HookInsert = 0;
 	Host::EmbedCallback embedcallback = 0;
+	TextThread *consolethread = nullptr;
 	void RemoveThreads(std::function<bool(ThreadParam)> removeIf)
 	{
 		std::vector<TextThread *> threadsToRemove;
@@ -81,6 +81,135 @@ namespace
 		}
 		return f64bitProc;
 	}
+	void __handlepipethread(HANDLE hookPipe, HANDLE hostPipe, HANDLE pipeAvailableEvent)
+	{
+		ConnectNamedPipe(hookPipe, nullptr);
+		CloseHandle(pipeAvailableEvent);
+		WORD hookversion[4];
+		BYTE buffer[PIPE_BUFFER_SIZE] = {};
+		DWORD bytesRead, processId;
+		ReadFile(hookPipe, &processId, sizeof(processId), &bytesRead, nullptr);
+		ReadFile(hookPipe, hookversion, sizeof(hookversion), &bytesRead, nullptr);
+		if (memcmp(hookversion, LUNA_VERSION, sizeof(hookversion)) != 0)
+			Host::InfoOutput(HOSTINFO::Warning, TR[UNMATCHABLEVERSION]);
+
+		processRecordsByIds->try_emplace(processId, processId, hostPipe);
+		processRecordsByIds->at(processId).Send(curr_lang);
+		OnConnect(processId);
+		Host::AddConsoleOutput(FormatString(TR[PROC_CONN], processId));
+
+		while (ReadFile(hookPipe, buffer, PIPE_BUFFER_SIZE, &bytesRead, nullptr))
+			switch (*(HostNotificationType *)buffer)
+			{
+			case HOST_NOTIFICATION_FOUND_HOOK:
+			{
+				auto info = *(HookFoundNotif *)buffer;
+				auto OnHookFound = processRecordsByIds->at(processId).OnHookFound;
+				std::wstring wide = info.text;
+				if (wide.size() > STRING)
+				{
+					wcscpy_s(info.hp.hookcode, HOOKCODE_LEN, HookCode::Generate(info.hp, processId).c_str());
+					OnHookFound(info.hp, std::move(info.text));
+				}
+				if (!(info.hp.type & CSHARP_STRING))
+				{
+					info.hp.type &= ~CODEC_UTF16;
+					if (auto converted = StringToWideString((char *)info.text, info.hp.codepage))
+#if SEARCH_SJIS_UNSAFE
+						if (converted->size())
+#else
+						if (converted->size() > STRING)
+#endif
+						{
+							wcscpy_s(info.hp.hookcode, HOOKCODE_LEN, HookCode::Generate(info.hp, processId).c_str());
+							OnHookFound(info.hp, std::move(converted.value()));
+						}
+					if (auto converted = StringToWideString((char *)info.text, info.hp.codepage = CP_UTF8))
+						if (converted->size() > STRING)
+						{
+							wcscpy_s(info.hp.hookcode, HOOKCODE_LEN, HookCode::Generate(info.hp, processId).c_str());
+							OnHookFound(info.hp, std::move(converted.value()));
+						}
+				}
+			}
+			break;
+			case HOST_NOTIFICATION_RMVHOOK:
+			{
+				auto info = *(HookRemovedNotif *)buffer;
+				auto sm = Host::GetCommonSharedMem(processId);
+				if (sm)
+					for (int i = 0; i < ARRAYSIZE(sm->embedtps); i++)
+						if (sm->embedtps[i].use && (sm->embedtps[i].tp.addr == info.address) && (sm->embedtps[i].tp.processId == processId))
+							ZeroMemory(sm->embedtps + i, sizeof(sm->embedtps[i]));
+				RemoveThreads([&](ThreadParam tp)
+							  { return tp.processId == processId && tp.addr == info.address; });
+			}
+			break;
+			case HOST_NOTIFICATION_INSERTING_HOOK:
+			{
+				if (HookInsert)
+				{
+					auto info = (HookInsertingNotif *)buffer;
+					HookInsert(processId, info->addr, info->hookcode);
+				}
+			}
+			break;
+			case HOST_NOTIFICATION_TEXT:
+			{
+				auto info = *(HostInfoNotif *)buffer;
+				Host::InfoOutput(info.type, StringToWideString(info.message));
+			}
+			break;
+			default:
+			{
+				auto data = (TextOutput_T *)buffer;
+				auto length = bytesRead - sizeof(TextOutput_T);
+				auto tp = data->tp;
+				auto hp = data->hp;
+				auto _textThreadsByParams = textThreadsByParams.Acquire();
+
+				auto thread = _textThreadsByParams->find(tp);
+				if (thread == _textThreadsByParams->end())
+				{
+					try
+					{
+						thread = _textThreadsByParams->try_emplace(tp, tp, hp).first;
+					}
+					catch (std::out_of_range)
+					{
+						continue;
+					} // probably garbage data in pipe, try again
+					OnCreate(thread->second);
+				}
+
+				thread->second.hp.type = data->type;
+				thread->second.Push(data->data, length);
+
+				if (embedcallback)
+				{
+					auto &hp = thread->second.hp;
+					if (hp.type & EMBED_ABLE && Host::CheckIsUsingEmbed(thread->second.tp))
+					{
+						if (auto t = commonparsestring(data->data, length, &hp, Host::defaultCodepage))
+						{
+							auto text = t.value();
+							if (text.size())
+							{
+								embedcallback(text, tp);
+							}
+						}
+					}
+				}
+			}
+			break;
+			}
+
+		RemoveThreads([&](ThreadParam tp)
+					  { return tp.processId == processId; });
+		OnDisconnect(processId);
+		Host::AddConsoleOutput(FormatString(TR[PROC_DISCONN], processId));
+		processRecordsByIds->erase(processId);
+	}
 	void CreatePipe(int pid)
 	{
 		HANDLE
@@ -88,119 +217,8 @@ namespace
 		hostPipe = CreateNamedPipeW((std::wstring(HOST_PIPE) + std::to_wstring(pid)).c_str(), PIPE_ACCESS_OUTBOUND, PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE, PIPE_UNLIMITED_INSTANCES, PIPE_BUFFER_SIZE, 0, MAXDWORD, &allAccess);
 		HANDLE pipeAvailableEvent = CreateEventW(&allAccess, FALSE, FALSE, (std::wstring(PIPE_AVAILABLE_EVENT) + std::to_wstring(pid)).c_str());
 
-		Host::AddConsoleOutput((std::wstring(PIPE_AVAILABLE_EVENT) + std::to_wstring(pid)));
 		SetEvent(pipeAvailableEvent);
-		std::thread([hookPipe, hostPipe, pipeAvailableEvent]
-					{
-			ConnectNamedPipe(hookPipe, nullptr);
-			CloseHandle(pipeAvailableEvent);
-			BYTE buffer[PIPE_BUFFER_SIZE] = {};
-			DWORD bytesRead, processId;
-			ReadFile(hookPipe, &processId, sizeof(processId), &bytesRead, nullptr);
-			processRecordsByIds->try_emplace(processId, processId, hostPipe);
-			OnConnect(processId);
-			Host::AddConsoleOutput(FormatString(PROC_CONN,processId));
-			//CreatePipe();
-			WORD hookversion[4];
-			WORD hostversion[4]=LUNA_VERSION; 
-			if( ReadFile(hookPipe, hookversion, sizeof(hookversion), &bytesRead, nullptr)){ 
-					if(memcmp(hostversion,hookversion,sizeof(hookversion))!=0)
-						Host::Warning(UNMATCHABLEVERSION);
-			} 
-			 
-			while (ReadFile(hookPipe, buffer, PIPE_BUFFER_SIZE, &bytesRead, nullptr))
-				switch (*(HostNotificationType*)buffer)
-				{
-				case HOST_NOTIFICATION_FOUND_HOOK:
-				{
-					auto info = *(HookFoundNotif*)buffer;
-					auto OnHookFound = processRecordsByIds->at(processId).OnHookFound; 
-					std::wstring wide = info.text;
-					if (wide.size() > STRING) {
-						wcscpy_s(info.hp.hookcode,HOOKCODE_LEN, HookCode::Generate(info.hp, processId).c_str());
-						OnHookFound(info.hp, std::move(info.text));
-					}
-					info.hp.type &= ~CODEC_UTF16;
-					if (auto converted = StringToWideString((char*)info.text, info.hp.codepage))
-						if (converted->size() > STRING) 
-						{
-							wcscpy_s(info.hp.hookcode,HOOKCODE_LEN, HookCode::Generate(info.hp, processId).c_str());
-							OnHookFound(info.hp, std::move(converted.value()));
-						}
-					if (auto converted = StringToWideString((char*)info.text, info.hp.codepage = CP_UTF8))
-						if (converted->size() > STRING)
-						{
-							wcscpy_s(info.hp.hookcode,HOOKCODE_LEN, HookCode::Generate(info.hp, processId).c_str());
-							OnHookFound(info.hp, std::move(converted.value()));
-						}
-				}
-				break;
-				case HOST_NOTIFICATION_RMVHOOK:
-				{
-					auto info = *(HookRemovedNotif*)buffer;
-					RemoveThreads([&](ThreadParam tp) { return tp.processId == processId && tp.addr == info.address; });
-				}
-				break;
-				case HOST_NOTIFICATION_INSERTING_HOOK:
-				{
-					if(HookInsert){
-						auto info = (HookInsertingNotif*)buffer;
-            			HookInsert(processId, info->addr,info->hookcode);
-					}
-				}
-				break;
-				case HOST_NOTIFICATION_TEXT:
-				{
-					auto info = *(ConsoleOutputNotif*)buffer;
-					Host::AddConsoleOutput(StringToWideString(info.message));
-				}
-				break;
-				case HOST_NOTIFICATION_WARNING:
-				{
-					auto info = *(WarningNotif*)buffer;
-					Host::Warning(StringToWideString(info.message));
-				}
-				break;
-				default:
-				{
-					auto data=(TextOutput_T*)buffer;
-					auto length= bytesRead - sizeof(TextOutput_T);
-					auto tp = data->tp;
-					auto hp=data->hp;
-					auto _textThreadsByParams=textThreadsByParams.Acquire();
-					
-					auto thread = _textThreadsByParams->find(tp);
-					if (thread == _textThreadsByParams->end())
-					{
-						try { thread = _textThreadsByParams->try_emplace(tp, tp, hp).first; }
-						catch (std::out_of_range) { continue; } // probably garbage data in pipe, try again
-						OnCreate(thread->second);
-					}
-					 
-					thread->second.hp.type=data->type;
-					thread->second.Push(data->data, length);
-
-					if(embedcallback){
-						auto & hp=thread->second.hp;
-						if(hp.type&EMBED_ABLE && Host::CheckIsUsingEmbed(thread->second.tp)){
-							if (auto t=commonparsestring(data->data,length,&hp,Host::defaultCodepage)){
-								auto text=t.value();
-								if(text.size()){
-									embedcallback(text,tp);
-								}
-							} 
-						}
-						
-					}
-				}
-				break;
-				}
-
-			RemoveThreads([&](ThreadParam tp) { return tp.processId == processId; });
-			OnDisconnect(processId);
-			Host::AddConsoleOutput(FormatString(PROC_DISCONN,processId));
-			processRecordsByIds->erase(processId); })
-			.detach();
+		std::thread(__handlepipethread, hookPipe, hostPipe, pipeAvailableEvent).detach();
 	}
 }
 
@@ -209,6 +227,16 @@ namespace Host
 	std::mutex threadmutex;
 	std::mutex outputmutex;
 	std::mutex procmutex;
+
+	void SetLanguage(const char *lang)
+	{
+		curr_lang = map_to_support_lang(lang);
+		auto &prs = processRecordsByIds.Acquire().contents;
+		for (auto &&[_, record] : prs)
+		{
+			record.Send(SetLanguageCmd(curr_lang));
+		}
+	}
 	void Start(ProcessEventHandler Connect, ProcessEventHandler Disconnect, ThreadEventHandler Create, ThreadEventHandler Destroy, TextThread::OutputCallback Output, bool createconsole)
 	{
 		OnConnect = [=](auto &&...args)
@@ -224,22 +252,28 @@ namespace Host
 
 		if (createconsole)
 		{
-			OnCreate(textThreadsByParams->try_emplace(console, console, HookParam{}, CONSOLE).first->second);
-			Host::AddConsoleOutput(ProjectHomePage);
+			OnCreate(textThreadsByParams->try_emplace(console, console, HookParam{}, TR[CONSOLE]).first->second);
+			consolethread = &textThreadsByParams->at(console);
+			Host::AddConsoleOutput(TR[ProjectHomePage]);
 		}
-
 		// CreatePipe();
 	}
-	void StartEx(std::optional<ProcessEventHandler> Connect, std::optional<ProcessEventHandler> Disconnect, std::optional<ThreadEventHandler> Create, std::optional<ThreadEventHandler> Destroy, std::optional<TextThread::OutputCallback> Output, std::optional<ConsoleHandler> console, std::optional<HookInsertHandler> hookinsert, std::optional<EmbedCallback> embed, std::optional<ConsoleHandler> warning)
+	void StartEx(std::optional<ProcessEventHandler> Connect,
+				 std::optional<ProcessEventHandler> Disconnect,
+				 std::optional<ThreadEventHandler> Create,
+				 std::optional<ThreadEventHandler> Destroy,
+				 std::optional<TextThread::OutputCallback> Output,
+				 bool consolethread,
+				 std::optional<HostInfoHandler> hostinfo,
+				 std::optional<HookInsertHandler> hookinsert,
+				 std::optional<EmbedCallback> embed)
 	{
 		Start(Connect.value_or([](auto) {}), Disconnect.value_or([](auto) {}), Create.value_or([](auto &) {}), Destroy.value_or([](auto &) {}), Output.value_or([](auto &, auto &)
 																																								{ return false; }),
-			  !console);
-		if (warning)
-			OnWarning = warning.value();
-		if (console)
-			OnConsole = [=](auto &&...args)
-			{std::lock_guard _(outputmutex);console.value()(std::forward<decltype(args)>(args)...); };
+			  consolethread);
+		if (hostinfo)
+			OnHostInfo = [=](auto &&...args)
+			{std::lock_guard _(outputmutex);hostinfo.value()(std::forward<decltype(args)>(args)...); };
 		if (hookinsert)
 			HookInsert = [=](auto &&...args)
 			{std::lock_guard _(threadmutex);hookinsert.value()(std::forward<decltype(args)>(args)...); };
@@ -271,7 +305,7 @@ namespace Host
 			}
 			else if (GetLastError() == ERROR_ACCESS_DENIED)
 			{
-				AddConsoleOutput(NEED_64_BIT); // https://stackoverflow.com/questions/16091141/createremotethread-access-denied
+				AddConsoleOutput(TR[NEED_64_BIT]); // https://stackoverflow.com/questions/16091141/createremotethread-access-denied
 				succ = false;
 			}
 			VirtualFreeEx(process, remoteData, 0, MEM_RELEASE);
@@ -299,7 +333,7 @@ namespace Host
 		WinMutex(ITH_HOOKMAN_MUTEX_ + std::to_wstring(processId));
 		if (GetLastError() == ERROR_ALREADY_EXISTS)
 		{
-			AddConsoleOutput(ALREADY_INJECTED);
+			AddConsoleOutput(TR[ALREADY_INJECTED]);
 			return false;
 		}
 		return true;
@@ -312,7 +346,6 @@ namespace Host
 		bool proc64 = Is64BitProcess(process);
 		auto dllname = proc64 ? LUNA_HOOK_DLL_64 : LUNA_HOOK_DLL_32;
 		std::wstring location = locationX.size() ? (locationX + L"\\" + dllname) : std::filesystem::path(getModuleFilename().value()).replace_filename(dllname);
-		AddConsoleOutput(location);
 		if (proc64 == x64)
 		{
 			return (SafeInject(process, location));
@@ -338,7 +371,7 @@ namespace Host
 		std::thread([=]
 					{
 			if(InjectDll(processId,locationX))return ;
-			AddConsoleOutput(INJECT_FAILED); })
+			AddConsoleOutput(TR[INJECT_FAILED]); })
 			.detach();
 	}
 
@@ -349,7 +382,6 @@ namespace Host
 			return;
 		prs.at(processId).Send(HOST_COMMAND_DETACH);
 	}
-
 	void InsertPCHooks(DWORD processId, int which)
 	{
 		auto &prs = processRecordsByIds.Acquire().contents;
@@ -404,16 +436,29 @@ namespace Host
 	}
 	void AddConsoleOutput(std::wstring text)
 	{
-		if (OnConsole)
-			OnConsole(std::move(text));
-		else
-			GetThread(console).AddSentence(std::move(text));
+		InfoOutput(HOSTINFO::Console, text);
 	}
-	void Warning(std::wstring text)
+	void InfoOutput(HOSTINFO type, std::wstring text)
 	{
-		if (OnWarning)
-			OnWarning(text);
-		AddConsoleOutput(L"[Warning] " + text);
+		if (OnHostInfo)
+			OnHostInfo(type, std::move(text));
+
+		if (consolethread || (type != HOSTINFO::Console))
+		{
+			switch (type)
+			{
+			case HOSTINFO::Warning:
+				text = FormatString(L"[%s]", TR[T_WARNING]) + text;
+				break;
+			case HOSTINFO::EmuGameName:
+				text = L"[Game] " + text;
+				break;
+			}
+			if (consolethread)
+				consolethread->AddSentence(std::move(text));
+			else if (type != HOSTINFO::Console)
+				OnHostInfo(HOSTINFO::Console, std::move(text));
+		}
 	}
 	bool CheckIsUsingEmbed(ThreadParam tp)
 	{

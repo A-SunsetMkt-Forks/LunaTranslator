@@ -127,44 +127,18 @@ html_resize.argtypes = c_void_p, c_uint, c_uint, c_uint, c_uint
 html_release = utilsdll.html_release
 html_release.argtypes = (c_void_p,)
 html_get_current_url = utilsdll.html_get_current_url
-html_get_current_url.argtypes = c_void_p, c_wchar_p
+html_get_current_url.argtypes = (c_void_p,)
+html_get_current_url.restype = c_wchar_p
 html_set_html = utilsdll.html_set_html
-html_set_html.argtypes = (
-    c_void_p,
-    c_wchar_p,
-)
-
-
-class HTMLBrowser:
-    @staticmethod
-    def version():
-        return html_version()
-
-    def __init__(self, parent) -> None:
-        self.html = html_new(parent)
-
-    def set_html(self, html):
-        html_set_html(self.html, html)
-
-    def resize(
-        self,
-        x,
-        y,
-        w,
-        h,
-    ):
-        html_resize(self.html, x, y, w, h)
-
-    def navigate(self, url):
-        html_navigate(self.html, url)
-
-    def get_current_url(self):
-        w = create_unicode_buffer(65536)
-        html_get_current_url(self.html, w)
-        return w.value
-
-    def __del__(self):
-        html_release(self.html)
+html_set_html.argtypes = (c_void_p, c_wchar_p)
+html_add_menu = utilsdll.html_add_menu
+html_add_menu.argtypes = (c_void_p, c_int, c_int, c_wchar_p)
+html_get_select_text = utilsdll.html_get_select_text
+html_get_select_text.argtypes = (c_void_p,)
+html_get_select_text.restype = c_wchar_p
+html_bind_function_FT = CFUNCTYPE(None, POINTER(c_wchar_p), c_int)
+html_bind_function = utilsdll.html_bind_function
+html_bind_function.argtypes = c_void_p, c_wchar_p, html_bind_function_FT
 
 
 _GetLnkTargetPath = utilsdll.GetLnkTargetPath
@@ -341,6 +315,17 @@ add_WebMessageReceived.argtypes = (c_void_p, add_WebMessageReceived_cb)
 add_WebMessageReceived.restype = c_void_p
 remove_WebMessageReceived = utilsdll.remove_WebMessageReceived
 remove_WebMessageReceived.argtypes = c_void_p, c_void_p
+add_ContextMenuRequested_cb = CFUNCTYPE(c_void_p, c_wchar_p)
+add_ContextMenuRequested = utilsdll.add_ContextMenuRequested
+add_ContextMenuRequested.argtypes = (
+    c_void_p,
+    c_int,
+    c_wchar_p,
+    add_ContextMenuRequested_cb,
+)
+add_ContextMenuRequested.restype = c_void_p
+remove_ContextMenuRequested = utilsdll.remove_ContextMenuRequested
+remove_ContextMenuRequested.argtypes = c_void_p, c_void_p
 clipboard_callback = utilsdll.clipboard_callback
 clipboard_callback.argtypes = (c_void_p,)
 clipboard_callback.restype = HWND
@@ -374,3 +359,7 @@ StartCaptureAsync.argtypes = (StartCaptureAsync_cb,)
 StartCaptureAsync.restype = HANDLE
 StopCaptureAsync = utilsdll.StopCaptureAsync
 StopCaptureAsync.argtypes = (HANDLE,)
+
+check_window_viewable = utilsdll.check_window_viewable
+check_window_viewable.argtypes = (HWND,)
+check_window_viewable.restype = c_bool

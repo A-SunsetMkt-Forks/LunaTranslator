@@ -9,7 +9,7 @@
 ### [User Manual](https://docs.lunatranslator.org/#/zh/)  <a href="https://discord.com/invite/ErtDwVeAbB"><img  src="https://img.shields.io/discord/1262692128031772733?label=Discord&logo=discord&color=FF007C"></a> 
 
 
-### [简体中文](../../README.md) | English | [Русский язык](README_ru.md) | [Other Language](otherlang.md) 
+### [简体中文](../../README.md) | English | [Other Language](otherlang.md) 
 
 
 > **A galgame translation tool**
@@ -35,8 +35,6 @@ Supports almost all conceivable translation engines, including:
 - **Registered Online Translation** Supports user-registered **traditional translation** (Baidu, Tencent, Youdao, Xiaoniu, Caiyun, Volcano, DeepL, yandex, google, ibm, Azure) and **large model translation** (ChatGPT compatible interface, claude, cohere, gemini, Baidu Qianfan, Tencent Hunyuan)
 
 - **Offline Translation** Supports **traditional translation** (J Beijing 7, Kingsoft, Yidiantong, ezTrans, Sugoi, MT5) and offline deployed **large model translation** (ChatGPT compatible interface, Sakura large model)
-
-- **Chrome Debug Translation** Supports **traditional translation** (deepl, yandex, youdao, baidu, tencent, bing, caiyun, xiaoniu, alibaba, google) and **large model translation** (chatgpt, deepseek, moonshot, qianwen, chatglm, Theb.ai, DuckDuckGo)
 
 - **Pre-translation** Supports reading pre-translated files, supports translation caching
 

@@ -1,5 +1,6 @@
 
 #include "MinHook.h"
+#define DUMP_JIT_ADDR_MAP 0
 namespace
 {
 	SearchParam sp;
@@ -9,18 +10,18 @@ namespace
 	{
 		uint64_t address = 0;
 		uint64_t em_addr = 0;
-		int argidx = 0;
 		intptr_t padding = 0;
 		int offset = 0;
 		JITTYPE jittype;
 		char text[MAX_STRING_SIZE] = {};
+		bool csstring;
 	};
 	std::unique_ptr<HookRecord[]> records;
 	long recordsAvailable;
 	uint64_t signatureCache[CACHE_SIZE] = {};
 	long sumCache[CACHE_SIZE] = {};
 	uintptr_t pageCache[CACHE_SIZE] = {};
-
+	std::unordered_map<uintptr_t, std::string> remapunityjit;
 #ifndef _WIN64
 	BYTE trampoline[] =
 		{
@@ -95,7 +96,6 @@ namespace
 	constexpr int addr_offset = 50, send_offset = 60, original_offset = 126, registers = 16;
 #endif
 }
-
 bool IsBadReadPtr(void *data)
 {
 	if (data > records.get() && data < records.get() + sp.maxRecords)
@@ -124,7 +124,7 @@ bool IsBadReadPtr(void *data)
 	}
 	return cacheEntry == BAD_PAGE;
 }
-void DoSend(int i, uintptr_t address, char *str, intptr_t padding, JITTYPE jittype = JITTYPE::PC, uint64_t em_addr = 0)
+void DoSend(int i, uintptr_t address, char *str, intptr_t padding, JITTYPE jittype = JITTYPE::PC, uint64_t em_addr = 0, bool csstring = false)
 {
 	str += padding;
 	if (IsBadReadPtr(str) || IsBadReadPtr(str + MAX_STRING_SIZE))
@@ -132,15 +132,22 @@ void DoSend(int i, uintptr_t address, char *str, intptr_t padding, JITTYPE jitty
 	__try
 	{
 		int length = 0, sum = 0;
-		for (; (str[length] || str[length + 1]) && length < MAX_STRING_SIZE; length += 2)
+		for (; *(uint16_t *)(str + length) && length < MAX_STRING_SIZE; length += sizeof(uint16_t))
 			sum += *(uint16_t *)(str + length);
+#if DUMP_JIT_ADDR_MAP
+		if (((length > STRING) || (IsDBCSLeadByteEx(932, *str))) && length < MAX_STRING_SIZE - 1)
+#else
 		if (length > STRING && length < MAX_STRING_SIZE - 1)
+#endif
 		{
 			// many duplicate results with same address, offset, and third/fourth character will be found: filter them out
 			uint64_t signature = ((uint64_t)i << 56) | ((uint64_t)(str[2] + str[3]) << 48) | address;
+#if DUMP_JIT_ADDR_MAP
+#else
 			if (signatureCache[signature % CACHE_SIZE] == signature)
 				return;
 			signatureCache[signature % CACHE_SIZE] = signature;
+#endif
 			// if there are huge amount of strings that are the same, it's probably garbage: filter them out
 			// can't store all the strings, so use sum as heuristic instead
 			if (_InterlockedIncrement(sumCache + (sum % CACHE_SIZE)) > 25)
@@ -150,7 +157,13 @@ void DoSend(int i, uintptr_t address, char *str, intptr_t padding, JITTYPE jitty
 			{
 				records[n].jittype = jittype;
 				records[n].padding = padding;
-				if (jittype == JITTYPE::PC)
+				records[n].csstring = csstring;
+				if (csstring)
+				{
+					records[n].address = address;
+					records[n].offset = i;
+				}
+				else if (jittype == JITTYPE::PC)
 				{
 					records[n].address = address;
 					records[n].offset = i * sizeof(char *);
@@ -158,7 +171,7 @@ void DoSend(int i, uintptr_t address, char *str, intptr_t padding, JITTYPE jitty
 				else
 				{
 					records[n].em_addr = em_addr;
-					records[n].argidx = i;
+					records[n].offset = i;
 				}
 
 				for (int j = 0; j < length; ++j)
@@ -168,7 +181,7 @@ void DoSend(int i, uintptr_t address, char *str, intptr_t padding, JITTYPE jitty
 			if (n == sp.maxRecords)
 			{
 				spDefault.maxRecords = sp.maxRecords * 2;
-				ConsoleOutput(OUT_OF_RECORDS_RETRY);
+				ConsoleOutput(TR[OUT_OF_RECORDS_RETRY]);
 			}
 		}
 	}
@@ -176,7 +189,7 @@ void DoSend(int i, uintptr_t address, char *str, intptr_t padding, JITTYPE jitty
 	{
 	}
 }
-void Send(char **stack, uintptr_t address)
+void Send(char **strs, uintptr_t address)
 {
 	// it is unsafe to call ANY external functions from this, as they may have been hooked (if called the hook would call this function making an infinite loop)
 	// the exceptions are compiler intrinsics like _InterlockedDecrement
@@ -184,12 +197,30 @@ void Send(char **stack, uintptr_t address)
 		return;
 	for (int i = -registers; i < 10; ++i)
 	{
-		DoSend(i, address, stack[i], 0);
+		DoSend(i, address, strs[i], 0);
 		if (sp.padding)
-			DoSend(i, address, stack[i], sp.padding);
+			DoSend(i, address, strs[i], sp.padding);
 	}
 }
-void SafeSendJitVeh(hook_stack *stack, uintptr_t address, uint64_t em_addr, JITTYPE jittype, intptr_t padding)
+template <JITTYPE t>
+void SendCSharpString(char **strs, uintptr_t address)
+{
+	// it is unsafe to call ANY external functions from this, as they may have been hooked (if called the hook would call this function making an infinite loop)
+	// the exceptions are compiler intrinsics like _InterlockedDecrement
+	if (recordsAvailable <= 0)
+		return;
+	for (int i = 0; i < 10; ++i)
+	{
+		__try
+		{
+			DoSend(i, address, (char *)commonsolvemonostring(hook_context::fromBase((uintptr_t)strs)->argof(i)).value().data(), 0, t, 0, true);
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER)
+		{
+		}
+	}
+}
+void SafeSendJitVeh(hook_context *context, uintptr_t address, uint64_t em_addr, JITTYPE jittype, intptr_t padding)
 {
 	__try
 	{
@@ -200,17 +231,17 @@ void SafeSendJitVeh(hook_stack *stack, uintptr_t address, uint64_t em_addr, JITT
 			{
 #ifdef _WIN64
 			case JITTYPE::YUZU:
-				str = (char *)YUZU::emu_arg(stack, em_addr)[i];
+				str = (char *)YUZU::emu_arg(context, em_addr)[i];
 				break;
 			case JITTYPE::VITA3K:
-				str = (char *)VITA3K::emu_arg(stack)[i];
+				str = (char *)VITA3K::emu_arg(context)[i];
 				break;
 			case JITTYPE::RPCS3:
-				str = (char *)RPCS3::emu_arg(stack)[i];
+				str = (char *)RPCS3::emu_arg(context)[i];
 				break;
 #endif
 			case JITTYPE::PPSSPP:
-				str = (char *)PPSSPP::emu_arg(stack)[i];
+				str = (char *)PPSSPP::emu_arg(context)[i];
 				break;
 			default:
 				return;
@@ -225,7 +256,7 @@ void SafeSendJitVeh(hook_stack *stack, uintptr_t address, uint64_t em_addr, JITT
 	}
 }
 std::unordered_map<uintptr_t, uint64_t> addresscalledtime;
-bool SendJitVeh(PCONTEXT context, uintptr_t address, uint64_t em_addr, JITTYPE jittype, intptr_t padding)
+bool SendJitVeh(PCONTEXT pcontext, uintptr_t address, uint64_t em_addr, JITTYPE jittype, intptr_t padding)
 {
 	if (safeautoleaveveh)
 		return true;
@@ -237,9 +268,8 @@ bool SendJitVeh(PCONTEXT context, uintptr_t address, uint64_t em_addr, JITTYPE j
 	if (tm - addresscalledtime[address] < 100)
 		return false;
 	addresscalledtime[address] = tm;
-	auto stack = std::make_unique<hook_stack>();
-	context_get(stack.get(), context);
-	SafeSendJitVeh(stack.get(), address, em_addr, jittype, padding);
+	hook_context context = hook_context::fromPCONTEXT(pcontext);
+	SafeSendJitVeh(&context, address, em_addr, jittype, padding);
 	return true;
 }
 std::vector<uintptr_t> GetFunctions(uintptr_t module)
@@ -276,19 +306,29 @@ void mergevector(std::vector<uintptr_t> &v1, std::vector<uintptr_t> &v2)
 }
 void SearchForHooks_Return()
 {
-	ConsoleOutput(HOOK_SEARCH_FINISHED, sp.maxRecords - recordsAvailable);
+	ConsoleOutput(TR[HOOK_SEARCH_FINISHED], sp.maxRecords - recordsAvailable);
 	for (int i = 0, results = 0; i < sp.maxRecords; ++i)
 	{
 		HookParam hp;
 		hp.codepage = sp.codepage;
 		hp.jittype = records[i].jittype;
 		hp.padding = records[i].padding;
-
-		if (records[i].jittype == JITTYPE::PC)
+		hp.offset = records[i].offset;
+		if (records[i].csstring)
 		{
 			if (!records[i].address)
 				continue;
-			hp.offset = records[i].offset;
+			hp.type = CODEC_UTF16 | USING_STRING | CSHARP_STRING;
+			hp.address = records[i].address;
+			if (hp.jittype == JITTYPE::UNITY)
+			{
+				strncpy(hp.function, remapunityjit[hp.address].c_str(), sizeof(hp.function));
+			}
+		}
+		else if (records[i].jittype == JITTYPE::PC)
+		{
+			if (!records[i].address)
+				continue;
 			hp.type = CODEC_UTF16 | USING_STRING;
 			hp.address = records[i].address;
 		}
@@ -298,11 +338,10 @@ void SearchForHooks_Return()
 				continue;
 			hp.emu_addr = records[i].em_addr;
 			hp.type = CODEC_UTF16 | USING_STRING | BREAK_POINT | NO_CONTEXT;
-			hp.argidx = records[i].argidx;
 		}
 		NotifyHookFound(hp, (wchar_t *)records[i].text);
 		if (++results % 100'000 == 0)
-			ConsoleOutput(ResultsNum, results);
+			ConsoleOutput(TR[ResultsNum], results);
 	}
 	records.reset();
 	for (int i = 0; i < CACHE_SIZE; ++i)
@@ -317,179 +356,239 @@ void initrecords()
 		}
 		catch (std::bad_alloc)
 		{
-			ConsoleOutput(SearchForHooks_ERROR, sp.maxRecords /= 2);
+			ConsoleOutput(TR[SearchForHooks_ERROR], sp.maxRecords /= 2);
 		}
 	while (!records && sp.maxRecords);
 }
+void inlinehookpipeline(std::vector<uintptr_t> &addresses)
+{
+	auto trampolines = (decltype(trampoline) *)VirtualAlloc(NULL, sizeof(trampoline) * addresses.size(), MEM_COMMIT, PAGE_READWRITE);
+	VirtualProtect(trampolines, addresses.size() * sizeof(trampoline), PAGE_EXECUTE_READWRITE, DUMMY);
+	std::vector<uintptr_t> mherroridx;
+	for (int i = 0; i < addresses.size(); ++i)
+	{
+		void *original;
+		// 避免MH_RemoveHook时移除原本已有hook
+		if (MH_CreateHook((void *)addresses[i], trampolines[i], &original) != MH_OK)
+		{
+			mherroridx.push_back(i);
+		}
+		MH_QueueEnableHook((void *)addresses[i]);
+		memcpy(trampolines[i], trampoline, sizeof(trampoline));
+		*(uintptr_t *)(trampolines[i] + addr_offset) = addresses[i];
+		*(void **)(trampolines[i] + original_offset) = original;
+		if (i % 2500 == 0)
+			ConsoleOutput(TR[HOOK_SEARCH_INITIALIZING], 1 + 98. * i / addresses.size());
+	}
+	// 避免MH_RemoveHook时移除原本已有hook
+	for (int i = 0; i < mherroridx.size(); i++)
+	{
+		auto reverseidx = mherroridx[mherroridx.size() - 1 - i];
+		addresses.erase(addresses.begin() + reverseidx);
+	}
+
+	ConsoleOutput(TR[HOOK_SEARCH_INITIALIZED], addresses.size());
+	MH_ApplyQueued();
+	ConsoleOutput(TR[HOOK_SEARCH_STARTING]);
+	ConsoleOutput(TR[MAKE_GAME_PROCESS_TEXT], sp.searchTime / 1000);
+	Sleep(sp.searchTime);
+	for (auto addr : addresses)
+		MH_QueueDisableHook((void *)addr);
+	MH_ApplyQueued();
+	Sleep(1000);
+	for (auto addr : addresses)
+		MH_RemoveHook((void *)addr);
+	VirtualFree(trampolines, 0, MEM_RELEASE);
+}
+void _SearchForHooks(SearchParam spUser)
+{
+	static std::mutex m;
+	std::scoped_lock lock(m);
+	ConsoleOutput(TR[HOOK_SEARCH_INITIALIZING], 0.);
+
+	sp = spUser.length == 0 ? spDefault : spUser;
+	sp.codepage = spUser.codepage;
+	initrecords();
+	if ((!sp.isjithook) || (jittypedefault == JITTYPE::PC))
+	{
+		*(void **)(trampoline + send_offset) = Send;
+		std::vector<uintptr_t> addresses;
+		if (*sp.boundaryModule)
+		{
+			auto [minaddr, maxaddr] = Util::QueryModuleLimits(GetModuleHandleW(sp.boundaryModule));
+			if (sp.address_method == 0)
+			{
+				sp.minAddress = min(max(minaddr, sp.minAddress), maxaddr);
+				sp.maxAddress = max(min(maxaddr, sp.maxAddress), minaddr);
+			}
+			else if (sp.address_method == 1)
+			{
+				auto maxoff = maxaddr - minaddr;
+				sp.minAddress = minaddr + min(sp.minAddress, maxoff);
+				sp.maxAddress = minaddr + min(sp.maxAddress, maxoff);
+			}
+			// std::tie(sp.minAddress, sp.maxAddress) = Util::QueryModuleLimits(GetModuleHandleW(sp.boundaryModule));
+		}
+		if (*sp.exportModule)
+			addresses = GetFunctions((uintptr_t)GetModuleHandleW(sp.exportModule));
+		if (*sp.boundaryModule)
+		{
+			auto _addresses = GetFunctions((uintptr_t)GetModuleHandleW(sp.boundaryModule));
+			mergevector(addresses, _addresses);
+		}
+		std::vector<uintptr_t> addresses1;
+		if (sp.search_method == 0)
+		{
+			for (auto &addr : addresses1 = Util::SearchMemory(sp.pattern, sp.length, PAGE_EXECUTE, sp.minAddress, sp.maxAddress))
+				addr += sp.offset;
+		}
+		else if (sp.search_method == 1)
+		{
+			auto checklength = 3;
+			auto checker = [checklength](DWORD k)
+			{
+				if (k == 0xcccccccc || k == 0x90909090 || k == 0xccccccc3 || k == 0x909090c3)
+					return true;
+				DWORD t = k & 0xff0000ff;
+				if (t == 0xcc0000c2 || t == 0x900000c2)
+					return true;
+				if (checklength == 4)
+					return false;
+				k >>= 8;
+				if (k == 0xccccc3 || k == 0x9090c3)
+					return true;
+				if (checklength == 3)
+					return false;
+				// t = k & 0xff;
+				// if (t == 0xc2)
+				// return true;
+				k >>= 8;
+				if (k == 0xccc3 || k == 0x90c3)
+					return true;
+				if (checklength == 2)
+					return false;
+				k >>= 8;
+				if (k == 0xc3)
+					return true;
+				return false;
+			};
+			for (uintptr_t addr = sp.minAddress & ~0xf; addr < sp.maxAddress; addr += 0x10)
+			{
+				if (IsBadReadPtr((void *)(addr - 0x10), 0x110))
+				{
+					addr += 0x100 - 0x10;
+					continue;
+				}
+				auto need = checker(*(DWORD *)(addr - 4));
+				if (need)
+					addresses1.push_back(addr);
+			}
+		}
+		else if (sp.search_method == 2)
+		{
+			for (uintptr_t addr = sp.minAddress; addr < sp.maxAddress; addr++)
+			{
+				if (IsBadReadPtr((void *)addr, 0x100))
+				{
+					addr += 0x100 - 1;
+					continue;
+				}
+				if (((*(BYTE *)addr) == 0xe8))
+				{
+					auto off = *(DWORD *)(addr + 1);
+					auto funcaddr = addr + 5 + off;
+					if (sp.minAddress < funcaddr && sp.maxAddress > funcaddr)
+					{
+						auto it = std::find(addresses1.begin(), addresses1.end(), funcaddr);
+						addresses1.push_back(funcaddr);
+					}
+				}
+			}
+		}
+
+		mergevector(addresses, addresses1);
+
+		auto limits = Util::QueryModuleLimits(GetModuleHandleW(LUNA_HOOK_DLL));
+		addresses.erase(std::remove_if(addresses.begin(), addresses.end(), [&](auto addr)
+									   { return addr > limits.first && addr < limits.second; }),
+						addresses.end());
+
+		inlinehookpipeline(addresses);
+	}
+	else if (jittypedefault == JITTYPE::UNITY)
+	{
+		auto methods = loop_all_methods(false);
+		try
+		{
+			*(void **)(trampoline + send_offset) = SendCSharpString<JITTYPE::PC>;
+			std::vector<uintptr_t> addrs;
+			for (auto [_, addr] : std::get<il2cpploopinfo>(methods))
+				addrs.push_back(addr);
+			inlinehookpipeline(addrs);
+		}
+		catch (std::bad_variant_access const &ex)
+		{
+
+			*(void **)(trampoline + send_offset) = SendCSharpString<JITTYPE::UNITY>;
+			auto functions = std::get<monoloopinfo>(methods);
+			std::vector<uintptr_t> addrs;
+			for (auto [addr, func] : functions)
+			{
+				addrs.push_back(addr);
+				remapunityjit[addr] = func;
+			}
+			inlinehookpipeline(addrs);
+		}
+	}
+	else
+	{
+		safeautoleaveveh = false;
+
+		std::vector<uint64_t> successaddr;
+		uintptr_t minemaddr = -1, maxemaddr = 0;
+
+		ConsoleOutput(TR[HOOK_SEARCH_INITIALIZED], jitaddr2emuaddr.size());
+
+		for (auto addr : jitaddr2emuaddr)
+		{
+			minemaddr = min(minemaddr, addr.second.second);
+			maxemaddr = max(maxemaddr, addr.second.second);
+		}
+		ConsoleOutput("%p %p", minemaddr, maxemaddr);
+		ConsoleOutput("%p %p", sp.minAddress, sp.maxAddress);
+#if DUMP_JIT_ADDR_MAP
+		auto f = fopen("1.txt", "a");
+		for (auto addr : jitaddr2emuaddr)
+		{
+			fprintf(f, "%llx => %llx\n", addr.second.second, addr.first);
+		}
+		fclose(f);
+#endif
+		for (auto addr : jitaddr2emuaddr)
+		{
+			// ConsoleOutput("%llx => %p", addr.second.second ,addr.first);
+			if (addr.second.second > sp.maxAddress || addr.second.second < sp.minAddress)
+				continue;
+
+			// addresses.push_back(addr.first);
+			if (add_veh_hook((void *)addr.first, std::bind(SendJitVeh, std::placeholders::_1, addr.first, addr.second.second, addr.second.first, sp.padding)))
+				successaddr.push_back(addr.first);
+			if (successaddr.size() % 2500 == 0)
+				ConsoleOutput(TR[HOOK_SEARCH_INITIALIZING], 1 + 98. * successaddr.size() / jitaddr2emuaddr.size());
+		}
+		ConsoleOutput(TR[HOOK_SEARCH_INITIALIZED], successaddr.size());
+		ConsoleOutput(TR[MAKE_GAME_PROCESS_TEXT], sp.searchTime / 1000);
+		Sleep(sp.searchTime);
+		// for(auto addr:successaddr){
+		// 	remove_veh_hook((void*)addr);
+		// }
+		safeautoleaveveh = true;
+	}
+	SearchForHooks_Return();
+}
 void SearchForHooks(SearchParam spUser)
 {
-	std::thread([=]
-				{
-		static std::mutex m;
-		std::scoped_lock lock(m);
-		*(void**)(trampoline + send_offset) = Send;
-		ConsoleOutput(HOOK_SEARCH_INITIALIZING, 0.);
-
-		sp = spUser.length == 0 ? spDefault : spUser;
-		sp.codepage=spUser.codepage;
-		initrecords();
-
-		std::vector<uintptr_t> addresses;
-		if( sp.jittype==JITTYPE::PC)
-		{
-			if (*sp.boundaryModule) {
-				auto [minaddr,maxaddr]=Util::QueryModuleLimits(GetModuleHandleW(sp.boundaryModule));
-				if(sp.address_method==0){
-					sp.minAddress=min(max(minaddr,sp.minAddress),maxaddr);
-					sp.maxAddress=max(min(maxaddr,sp.maxAddress),minaddr);
-				}
-				else if(sp.address_method==1){
-					auto maxoff=maxaddr-minaddr;
-					sp.minAddress=minaddr+min(sp.minAddress,maxoff);
-					sp.maxAddress=minaddr+min(sp.maxAddress,maxoff);
-				}
-				//std::tie(sp.minAddress, sp.maxAddress) = Util::QueryModuleLimits(GetModuleHandleW(sp.boundaryModule));
-			}
-			if (*sp.exportModule) addresses = GetFunctions((uintptr_t)GetModuleHandleW(sp.exportModule));
-			if (*sp.boundaryModule){
-				auto _addresses = GetFunctions((uintptr_t)GetModuleHandleW(sp.boundaryModule));
-				mergevector(addresses,_addresses);
-			}
-			std::vector<uintptr_t> addresses1;
-			if(sp.search_method==0){
-				for (auto& addr : addresses1 = Util::SearchMemory(sp.pattern, sp.length, PAGE_EXECUTE, sp.minAddress, sp.maxAddress)) 
-					addr += sp.offset;
-			}
-			else if(sp.search_method==1){ 
-				auto checklength=3;
-				auto checker=[checklength](DWORD k){
-					if (k == 0xcccccccc
-					|| k == 0x90909090
-					|| k == 0xccccccc3
-					|| k == 0x909090c3
-					)
-					return true;
-					DWORD t = k & 0xff0000ff;
-					if (t == 0xcc0000c2 || t == 0x900000c2)
-					return true;
-					if(checklength==4)return false;
-					k >>= 8;
-					if (k == 0xccccc3 || k == 0x9090c3)
-					return true;
-					if(checklength==3)return false;
-					// t = k & 0xff;
-					// if (t == 0xc2)
-					// return true;
-					k >>= 8;
-					if (k == 0xccc3 || k == 0x90c3)
-					return true;
-					if(checklength==2)return false;
-					k >>= 8;
-					if (k == 0xc3)
-					return true;
-					return false;
-				};
-				for(uintptr_t addr=sp.minAddress& ~0xf;addr<sp.maxAddress;addr+=0x10){
-					if(IsBadReadPtr((void*)(addr-0x10),0x110)){
-						addr+=0x100-0x10;
-						continue;
-					}
-					auto need=checker(*(DWORD *)(addr-4));
-					if (need)
-					addresses1.push_back(addr);
-					 
-			}
-			}
-			else if(sp.search_method==2){  
-				for(uintptr_t addr=sp.minAddress;addr<sp.maxAddress;addr++){
-					if(IsBadReadPtr((void*)addr,0x100)){
-						addr+=0x100-1;
-						continue;
-					}
-					if(((*(BYTE*)addr)==0xe8)){
-						auto off=*(DWORD*)(addr+1);
-						auto funcaddr=addr+5+off; 
-						if(sp.minAddress<funcaddr && sp.maxAddress>funcaddr){
-							auto it = std::find(addresses1.begin(), addresses1.end(), funcaddr);  
-							addresses1.push_back(funcaddr);
-						}
-					}
-				}  
-			}
-				
-			mergevector(addresses,addresses1);
-
-			auto limits = Util::QueryModuleLimits(GetModuleHandleW(LUNA_HOOK_DLL));
-			addresses.erase(std::remove_if(addresses.begin(), addresses.end(), [&](auto addr) { return addr > limits.first && addr < limits.second; }), addresses.end());
-		
-
-			auto trampolines = (decltype(trampoline)*)VirtualAlloc(NULL, sizeof(trampoline) * addresses.size(), MEM_COMMIT, PAGE_READWRITE);
-			VirtualProtect(trampolines, addresses.size() * sizeof(trampoline), PAGE_EXECUTE_READWRITE, DUMMY);
-			std::vector<uintptr_t>mherroridx;
-			for (int i = 0; i < addresses.size(); ++i)
-			{
-				void* original; 
-				//避免MH_RemoveHook时移除原本已有hook
-				if(MH_CreateHook((void*)addresses[i], trampolines[i], &original)!=MH_OK){
-					mherroridx.push_back(i);
-				} 
-				MH_QueueEnableHook((void*)addresses[i]);
-				memcpy(trampolines[i], trampoline, sizeof(trampoline));
-				*(uintptr_t*)(trampolines[i] + addr_offset) = addresses[i];
-				*(void**)(trampolines[i] + original_offset) = original;
-				if (i % 2500 == 0) ConsoleOutput(HOOK_SEARCH_INITIALIZING, 1 + 98. * i / addresses.size());
-			}
-			//避免MH_RemoveHook时移除原本已有hook
-			for(int i=0;i<mherroridx.size();i++){
-				auto reverseidx=mherroridx[mherroridx.size()-1-i]; 
-				addresses.erase(addresses.begin()+reverseidx);
-			} 
-
-			ConsoleOutput(HOOK_SEARCH_INITIALIZED, addresses.size());
-			MH_ApplyQueued();
-			ConsoleOutput(HOOK_SEARCH_STARTING);
-			ConsoleOutput(MAKE_GAME_PROCESS_TEXT, sp.searchTime / 1000);
-			Sleep(sp.searchTime);
-			for (auto addr : addresses) MH_QueueDisableHook((void*)addr);
-			MH_ApplyQueued();
-			Sleep(1000);
-			for (auto addr : addresses) MH_RemoveHook((void*)addr);
-			VirtualFree(trampolines, 0, MEM_RELEASE);
-			SearchForHooks_Return();
-		}
-		else
-		{
-			safeautoleaveveh=false;
-			int i=0;
-			std::vector<uint64_t>successaddr;
-			uintptr_t minemaddr=-1,maxemaddr=0;
-
-			ConsoleOutput(HOOK_SEARCH_INITIALIZED, jitaddr2emuaddr.size());
-			
-			for(auto addr:jitaddr2emuaddr){
-				minemaddr=min(minemaddr,addr.second.second);
-				maxemaddr=max(maxemaddr,addr.second.second);
-			}
-			ConsoleOutput("%p %p",minemaddr,maxemaddr);
-			ConsoleOutput("%p %p",sp.minAddress,sp.maxAddress);
-			for(auto addr:jitaddr2emuaddr){
-				//ConsoleOutput("%llx => %p", addr.second.second ,addr.first);
-				if(addr.second.second>sp.maxAddress||addr.second.second<sp.minAddress)continue;
-				i+=1;
-				//addresses.push_back(addr.first);
-				if(add_veh_hook((void*)addr.first,std::bind(SendJitVeh,std::placeholders::_1,addr.first,addr.second.second,addr.second.first,sp.padding)))
-					successaddr.push_back(addr.first);
-				if (i % 2500 == 0) ConsoleOutput(HOOK_SEARCH_INITIALIZING, 1 + 98. * i / jitaddr2emuaddr.size());
-			}
-			ConsoleOutput(HOOK_SEARCH_INITIALIZED, i);
-			ConsoleOutput(MAKE_GAME_PROCESS_TEXT, sp.searchTime / 1000);
-			Sleep(sp.searchTime);
-			// for(auto addr:successaddr){
-			// 	remove_veh_hook((void*)addr);
-			// }
-			safeautoleaveveh=true;
-			SearchForHooks_Return();
-		} })
+	std::thread(_SearchForHooks, spUser)
 		.detach();
 }
 
@@ -503,8 +602,8 @@ void SearchForText(wchar_t *text, UINT codepage)
 		WideCharToMultiByte(codepage, 0, text, PATTERN_SIZE, codepageText, PATTERN_SIZE * 4, nullptr, nullptr);
 
 	if (strlen(utf8Text) < 4 || ((codepage != CP_UTF8) && (strlen(codepageText) < 4)) || wcslen(text) < 4)
-		return ConsoleOutput(NOT_ENOUGH_TEXT);
-	ConsoleOutput(HOOK_SEARCH_STARTING);
+		return ConsoleOutput(TR[NOT_ENOUGH_TEXT]);
+	ConsoleOutput(TR[HOOK_SEARCH_STARTING]);
 	auto GenerateHooks = [&](std::vector<uintptr_t> addresses, HookParamType type)
 	{
 		for (auto addr : addresses)
@@ -524,5 +623,5 @@ void SearchForText(wchar_t *text, UINT codepage)
 		GenerateHooks(Util::SearchMemory(codepageText, strlen(codepageText), PAGE_READWRITE), USING_STRING);
 	GenerateHooks(Util::SearchMemory(text, wcslen(text) * sizeof(wchar_t), PAGE_READWRITE), CODEC_UTF16);
 	if (!found)
-		ConsoleOutput(COULD_NOT_FIND);
+		ConsoleOutput(TR[COULD_NOT_FIND]);
 }

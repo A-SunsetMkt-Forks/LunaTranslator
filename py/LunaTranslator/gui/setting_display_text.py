@@ -1,7 +1,7 @@
 from qtsymbols import *
 import functools, platform
 import gobject, os, zipfile
-from myutils.config import globalconfig, static_data, _TR
+from myutils.config import globalconfig, static_data, _TR, get_platform
 from gui.inputdialog import autoinitdialog
 from myutils.wrapper import tryprint
 from myutils.utils import dynamiclink, translate_exits, copytree, getannotatedapiname
@@ -208,26 +208,6 @@ def installqwebdialog(self, link):
     )
 
 
-def on_not_find_qweb(self):
-    def _okcallback():
-
-        link = [
-            dynamiclink("{main_server}/Resource/QWebEngine_x86.zip"),
-            dynamiclink("{main_server}/Resource/QWebEngine_x64.zip"),
-        ][platform.architecture()[0] == "64bit"]
-        gobject.baseobject.openlink(link)
-        installqwebdialog(self, link)
-
-    getQMessageBox(
-        self,
-        "错误",
-        "未找到QWebEngine，点击确定前往下载QWebEngine",
-        True,
-        True,
-        okcallback=_okcallback,
-    )
-
-
 def resetgroudswitchcallback(self, group):
     if group == "QWebEngine":
         group = "webview"
@@ -296,6 +276,9 @@ def _createseletengeinecombo(self):
 
     visengine = ["Qt", "Webview2"]
     visengine_internal = ["textbrowser", "webview"]
+    if get_platform() == "xp":
+        visengine.pop(1)
+        visengine_internal.pop(1)
     self.seletengeinecombo = getsimplecombobox(
         visengine,
         globalconfig,

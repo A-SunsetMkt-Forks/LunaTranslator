@@ -1,7 +1,5 @@
-#include "engine64/PPSSPP.h"
 #include "engine64/Godot.h"
 #include "engine64/V8.h"
-#include "engine64/mono.h"
 #include "engine64/AGES7.h"
 #include "engine64/Artemis.h"
 #include "engine64/KiriKiri.h"
@@ -14,14 +12,17 @@
 #include "engine64/UnrealEngine.h"
 #include "engine64/TYPEMOON.h"
 #include "engine64/Kincaid.h"
+#include "engine64/BGI.h"
 #include "engine64/LightVN.h"
 #include "engine64/yuzu.h"
 #include "engine64/Ryujinx.h"
 #include "engine64/vita3k.h"
 #include "engine64/rpcs3.h"
 #include "engine64/MKXPZ.h"
+#include "engines/mono/mono.h"
 #include "engines/lua/lua51.h"
 #include "engines/python/Renpy.h"
+#include "engines/ppsspp/ppsspp.h"
 std::vector<ENGINE *> check_engines()
 {
     return {
@@ -31,7 +32,7 @@ std::vector<ENGINE *> check_engines()
         new mono,
         new yuzu,
         new Ryujinx,
-        new PPSSPPengine,
+        new PPSSPPWindows,
         new vita3k,
         new rpcs3,
         new livecaptions,
@@ -49,5 +50,6 @@ std::vector<ENGINE *> check_engines()
         new Kincaid,
         new lua51,
         new MKXPZ,
+        new BGI,
     };
 }

@@ -16,8 +16,6 @@ namespace
     }
     uintptr_t getDoJitAddress() {
         auto DoJitPtr=getDoJitAddress_();
-        
-        ConsoleOutput("DoJitPtr %p",DoJitPtr);
         if(!DoJitPtr)return 0;
         //<--DoJitPtr
         //0f85 1b050000 // jbe 0x00 ; long jump
@@ -29,28 +27,28 @@ namespace
         {
             case 0x48:{
                 switch(*(BYTE*)(checkaddr+2)){
-                    case 0xc0:emoffset=get_reg(regs::rax);break;
-                    case 0xc3:emoffset=get_reg(regs::rbx);break;
-                    case 0xc1:emoffset=get_reg(regs::rcx);break;
-                    case 0xc2:emoffset=get_reg(regs::rdx);break;
-                    case 0xc4:emoffset=get_reg(regs::rsp);break;
-                    case 0xc5:emoffset=get_reg(regs::rbp);break;
-                    case 0xc6:emoffset=get_reg(regs::rsi);break;
-                    case 0xc7:emoffset=get_reg(regs::rdi);break;
+                    case 0xc0:emoffset=regoffset(rax);break;
+                    case 0xc3:emoffset=regoffset(rbx);break;
+                    case 0xc1:emoffset=regoffset(rcx);break;
+                    case 0xc2:emoffset=regoffset(rdx);break;
+                    case 0xc4:emoffset=regoffset(rsp);break;
+                    case 0xc5:emoffset=regoffset(rbp);break;
+                    case 0xc6:emoffset=regoffset(rsi);break;
+                    case 0xc7:emoffset=regoffset(rdi);break;
                     default:emoffset=0;
                 }  
             }
             break;
             case 0x49:{
                 switch(*(BYTE*)(checkaddr+2)){
-                    case 0xc0:emoffset=get_reg(regs::r8);break;
-                    case 0xc1:emoffset=get_reg(regs::r9);break;
-                    case 0xc2:emoffset=get_reg(regs::r10);break;
-                    case 0xc3:emoffset=get_reg(regs::r11);break;
-                    case 0xc4:emoffset=get_reg(regs::r12);break;
-                    case 0xc5:emoffset=get_reg(regs::r13);break;
-                    case 0xc6:emoffset=get_reg(regs::r14);break;
-                    case 0xc7:emoffset=get_reg(regs::r15);break;
+                    case 0xc0:emoffset=regoffset(r8);break;
+                    case 0xc1:emoffset=regoffset(r9);break;
+                    case 0xc2:emoffset=regoffset(r10);break;
+                    case 0xc3:emoffset=regoffset(r11);break;
+                    case 0xc4:emoffset=regoffset(r12);break;
+                    case 0xc5:emoffset=regoffset(r13);break;
+                    case 0xc6:emoffset=regoffset(r14);break;
+                    case 0xc7:emoffset=regoffset(r15);break;
                     default:emoffset=0;
                 }
             }
@@ -73,28 +71,28 @@ namespace
         {
             case 0x48:{
                 switch(*(BYTE*)(checkaddr+2)){
-                    case 0x14:jitoffset=get_reg(regs::rdx);break;
-                    case 0x04:jitoffset=get_reg(regs::rax);break;
-                    case 0x1c:jitoffset=get_reg(regs::rbx);break;
-                    case 0x0c:jitoffset=get_reg(regs::rcx);break;
-                    case 0x24:jitoffset=get_reg(regs::rsp);break;
-                    case 0x2c:jitoffset=get_reg(regs::rbp);break;
-                    case 0x34:jitoffset=get_reg(regs::rsi);break;
-                    case 0x3c:jitoffset=get_reg(regs::rdi);break;
+                    case 0x14:jitoffset=regoffset(rdx);break;
+                    case 0x04:jitoffset=regoffset(rax);break;
+                    case 0x1c:jitoffset=regoffset(rbx);break;
+                    case 0x0c:jitoffset=regoffset(rcx);break;
+                    case 0x24:jitoffset=regoffset(rsp);break;
+                    case 0x2c:jitoffset=regoffset(rbp);break;
+                    case 0x34:jitoffset=regoffset(rsi);break;
+                    case 0x3c:jitoffset=regoffset(rdi);break;
                     default:jitoffset=0;
                 }  
             }
             break;
             case 0x4c:{
                 switch(*(BYTE*)(checkaddr+2)){
-                    case 0x04:jitoffset=get_reg(regs::r8);break;
-                    case 0x0c:jitoffset=get_reg(regs::r9);break;
-                    case 0x14:jitoffset=get_reg(regs::r10);break;
-                    case 0x1c:jitoffset=get_reg(regs::r11);break;
-                    case 0x24:jitoffset=get_reg(regs::r12);break;
-                    case 0x2c:jitoffset=get_reg(regs::r13);break;
-                    case 0x34:jitoffset=get_reg(regs::r14);break;
-                    case 0x3c:jitoffset=get_reg(regs::r15);break;
+                    case 0x04:jitoffset=regoffset(r8);break;
+                    case 0x0c:jitoffset=regoffset(r9);break;
+                    case 0x14:jitoffset=regoffset(r10);break;
+                    case 0x1c:jitoffset=regoffset(r11);break;
+                    case 0x24:jitoffset=regoffset(r12);break;
+                    case 0x2c:jitoffset=regoffset(r13);break;
+                    case 0x34:jitoffset=regoffset(r14);break;
+                    case 0x3c:jitoffset=regoffset(r15);break;
                     default:jitoffset=0;
                 }
             }
@@ -158,7 +156,7 @@ namespace
     struct emfuncinfo
     {
         uint64_t type;
-        int argidx;
+        int offset;
         int padding;
         decltype(HookParam::text_fun) hookfunc;
         decltype(HookParam::filter_fun) filterfun;
@@ -192,9 +190,10 @@ namespace
         hpinternal.address = ret;
         hpinternal.emu_addr = em_address; // 用于生成hcode
         hpinternal.type = USING_STRING | NO_CONTEXT | BREAK_POINT | op.type;
+        hpinternal.codepage = 932;
         hpinternal.text_fun = op.hookfunc;
         hpinternal.filter_fun = op.filterfun;
-        hpinternal.argidx = op.argidx;
+        hpinternal.offset = op.offset;
         hpinternal.padding = op.padding;
         hpinternal.jittype = JITTYPE::RPCS3;
         NewHook(hpinternal, op._id);
@@ -214,7 +213,7 @@ namespace
         HookParam hp;
         hp.type = DIRECT_READ;
         hp.address = 0x500000000;
-        hp.text_fun = [](hook_stack *stack, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
+        hp.text_fun = [](hook_context *context, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
         {
             for (auto [addr, info] : emfunctionhooks)
             {
@@ -242,15 +241,12 @@ bool rpcs3::attach_function()
     if (DoJitPtr == 0)
         return false;
     unsafeinithooks();
-    spDefault.jittype = JITTYPE::RPCS3;
-    spDefault.minAddress = 0;
-    spDefault.maxAddress = -1;
     HookParam hp;
     hp.address = DoJitPtr;
-    hp.text_fun = [](hook_stack *stack, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
+    hp.text_fun = [](hook_context *context, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
     {
-        auto em_address = stack->rcx; // *(uint32_t*)*(uintptr_t*)(stack->base+emoffset);
-        auto entrypoint = stack->r8;  //*(uintptr_t*)*(uintptr_t*)(stack->base+jitoffset)-0x0008000000000000;
+        auto em_address = context->rcx; // *(uint32_t*)*(uintptr_t*)(context->base+emoffset);
+        auto entrypoint = context->r8;  //*(uintptr_t*)*(uintptr_t*)(context->base+jitoffset)-0x0008000000000000;
         if (!em_address || !entrypoint)
             return;
         dohookemaddr(em_address, entrypoint);
@@ -265,8 +261,7 @@ namespace
     void FBLJM61131(TextBuffer *buffer, HookParam *hp)
     {
         auto s = buffer->strA();
-        std::regex pattern("\\[[^\\]]+.");
-        s = std::regex_replace(s, pattern, "");
+        s = std::regex_replace(s, std::regex("\\[[^\\]]+."), "");
         s = std::regex_replace(s, std::regex("\\\\k|\\\\x|%C|%B"), "");
         s = std::regex_replace(s, std::regex("\\%\\d+\\#[0-9a-fA-F]*\\;"), "");
         s = std::regex_replace(s, std::regex("\\n+"), " ");
@@ -275,7 +270,7 @@ namespace
     auto _ = []()
     {
         emfunctionhooks = {
-            //'&' -Sora no Mukou de Sakimasu you ni-
+            // ‘＆’ - 空の向こうで咲きますように -
             {0x46328, {CODEC_UTF8, 1, 0, 0, FBLJM61131, "BLJM61131"}},
             // Dunamis15
             {0x42c90, {CODEC_UTF8, 1, 0, 0, FBLJM61131, "BLJM60347"}},

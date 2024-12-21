@@ -454,92 +454,6 @@
     ],
     "aboutsource": [
         {
-            "name": "离线翻译",
-            "sources": [
-                {
-                    "name": "Sakura大模型",
-                    "links": [
-                        {
-                            "name": "Github",
-                            "link": "https://github.com/SakuraLLM/SakuraLLM"
-                        }
-                    ]
-                },
-                {
-                    "name": "过时的翻译器",
-                    "links": [
-                        {
-                            "name": "J北京7",
-                            "link": "{main_server}/Resource/translate/JBeijing7.zip"
-                        },
-                        {
-                            "name": "金山快译",
-                            "link": "{main_server}/Resource/translate/FastAIT09_Setup.25269.4101.zip"
-                        },
-                        {
-                            "name": "快译通",
-                            "link": "{main_server}/Resource/translate/DR.eye.zip"
-                        },
-                        {
-                            "name": "Sugoi",
-                            "link": "{main_server}/Resource/translate/Sugoi_Translator_V10.1.7z"
-                        }
-                    ]
-                }
-            ]
-        },
-        {
-            "name": "OCR",
-            "sources": [
-                {
-                    "name": "本地OCR_语言包",
-                    "links": [
-                        {
-                            "name": "日语",
-                            "link": "{main_server}/Resource/ocr_models/ja.zip"
-                        },
-                        {
-                            "name": "英语",
-                            "link": "{main_server}/Resource/ocr_models/en.zip"
-                        },
-                        {
-                            "name": "简体中文",
-                            "link": "{main_server}/Resource/ocr_models/zh.zip"
-                        },
-                        {
-                            "name": "繁体中文",
-                            "link": "{main_server}/Resource/ocr_models/cht.zip"
-                        },
-                        {
-                            "name": "韩语",
-                            "link": "{main_server}/Resource/ocr_models/ko.zip"
-                        },
-                        {
-                            "name": "俄语",
-                            "link": "{main_server}/Resource/ocr_models/ru.zip"
-                        }
-                    ]
-                },
-                {
-                    "name": "manga-ocr",
-                    "links": [
-                        {
-                            "name": "项目仓库",
-                            "link": "https://github.com/kha-white/manga-ocr"
-                        },
-                        {
-                            "name": "整合包_CPU",
-                            "link": "{main_server}/Resource/IntegrationPack/manga_ocr/cpu"
-                        },
-                        {
-                            "name": "整合包_GPU",
-                            "link": "{main_server}/Resource/IntegrationPack/manga_ocr/gpu"
-                        }
-                    ]
-                }
-            ]
-        },
-        {
             "name": "辞书",
             "sources": [
                 {
@@ -565,27 +479,6 @@
                         {
                             "name": "freemdict",
                             "link": "https://search.freemdict.com/"
-                        }
-                    ]
-                },
-                {
-                    "name": "过时的词典",
-                    "links": [
-                        {
-                            "name": "小学馆",
-                            "link": "{main_server}/Resource/dictionary/xiaoxueguan.db"
-                        },
-                        {
-                            "name": "EDICT",
-                            "link": "{main_server}/Resource/dictionary/edict.db"
-                        },
-                        {
-                            "name": "EDICT2",
-                            "link": "{main_server}/Resource/dictionary/edict2"
-                        },
-                        {
-                            "name": "灵格斯词典",
-                            "link": "{main_server}/Resource/dictionary/Lingoes.zip"
                         }
                     ]
                 }
@@ -1437,8 +1330,6 @@
     "checkintegrity": {
         "xp": [
             "./files/plugins/shareddllproxy32.exe",
-            "./files/plugins/NTLEAS/ntleak.dll",
-            "./files/plugins/NTLEAS/ntleai.dll",
             "./files/plugins/LunaHook/LunaHook32.dll",
             "./files/plugins/LunaHook/LunaHost32.dll",
             "./files/plugins/DLL32/winsharedutils32.dll",
@@ -1448,14 +1339,7 @@
         "shared": [
             "./files/plugins/shareddllproxy32.exe",
             "./files/plugins/shareddllproxy64.exe",
-            "./files/plugins/LoaderDll.dll",
-            "./files/plugins/LocaleEmulator.dll",
-            "./files/plugins/hookmagpie.dll",
             "./files/plugins/Magpie/Magpie.Core.exe",
-            "./files/plugins/Locale_Remulator/LRHookx32.dll",
-            "./files/plugins/Locale_Remulator/LRHookx64.dll",
-            "./files/plugins/NTLEAS/ntleak.dll",
-            "./files/plugins/NTLEAS/ntleai.dll",
             "./files/plugins/LunaHook/LunaHook32.dll",
             "./files/plugins/LunaHook/LunaHost32.dll",
             "./files/plugins/LunaHook/LunaHook64.dll",
@@ -1553,78 +1437,5 @@
     "bangumi_oauth": {
         "client_id": "bgm31536662bc84ee9a9",
         "client_secret": "b4ca9f5dc7c3819bff163843e1b5cdb0"
-    },
-    "hotkeys": [
-        [
-            "通用",
-            [
-                "_1",
-                "_2",
-                "_3",
-                "_5",
-                "_51",
-                "_6",
-                "_8",
-                "_9",
-                "_10",
-                "_16",
-                "_17"
-            ]
-        ],
-        [
-            "HOOK",
-            [
-                "_11",
-                "_12"
-            ]
-        ],
-        [
-            "OCR",
-            [
-                "_13",
-                "_14",
-                "_14_1",
-                "_23",
-                "_26",
-                "_26_1"
-            ]
-        ],
-        [
-            "剪贴板",
-            [
-                "36",
-                "_4",
-                "_28"
-            ]
-        ],
-        [
-            "TTS",
-            [
-                "_32",
-                "_7",
-                "_7_1"
-            ]
-        ],
-        [
-            "游戏",
-            [
-                "_15",
-                "_20",
-                "_21",
-                "_22",
-                "_25",
-                "_27",
-                "_31"
-            ]
-        ],
-        [
-            "查词",
-            [
-                "_29",
-                "_30",
-                "_35",
-                "_33"
-            ]
-        ]
-    ]
+    }
 }

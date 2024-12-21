@@ -5,7 +5,6 @@
 
 #include "texthook.h"
 #include "main.h"
-#include "stackoffset.hpp"
 #include "util/stringfilters.h"
 #include "memdbg/memsearch.h"
 #include "util/util.h"
@@ -19,7 +18,6 @@
 #include "embed_util.h"
 #include "hijackfuns.h"
 
-#include "Lang/Lang.h"
 #include "veh_hook.h"
 #include "engines/emujitarg.hpp"
 #include "engines/mono/monoil2cpp.h"

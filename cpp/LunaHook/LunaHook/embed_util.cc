@@ -116,13 +116,17 @@ void detachall()
 }
 void solvefont(HookParam hp)
 {
-  if (hp.hook_font)
+  if (hp.embed_hook_font & DISABLE_FONT_SWITCH)
   {
-    attachFunction(hp.hook_font);
+    Hijack::Disable_Font_Switch = true;
   }
-  if (hp.hook_font & F_MultiByteToWideChar)
+  if (hp.embed_hook_font)
+  {
+    attachFunction(hp.embed_hook_font);
+  }
+  if (hp.embed_hook_font & F_MultiByteToWideChar)
     disable_mbwc = true;
-  if (hp.hook_font & F_WideCharToMultiByte)
+  if (hp.embed_hook_font & F_WideCharToMultiByte)
     disable_wcmb = true;
 
   if (auto current_patch_fun = patch_fun.exchange(nullptr))
@@ -208,12 +212,12 @@ bool waitforevent(UINT32 timems, const ThreadParam &tp, const std::wstring &orig
 
 void TextHook::parsenewlineseperator(TextBuffer *buff)
 {
-  if (!(hp.newlineseperator))
+  if (!(hp.lineSeparator))
     return;
 
   if (hp.type & CODEC_UTF16)
   {
-    StringCharReplacer(buff, hp.newlineseperator, wcslen(hp.newlineseperator), L'\n');
+    StringCharReplacer(buff, hp.lineSeparator, wcslen(hp.lineSeparator), L'\n');
   }
   else if (hp.type & CODEC_UTF32)
     return;
@@ -221,8 +225,8 @@ void TextHook::parsenewlineseperator(TextBuffer *buff)
   {
     // ansi/utf8，newlineseperator都是简单字符
     std::string newlineseperatorA;
-    for (int i = 0; i < wcslen(hp.newlineseperator); i++)
-      newlineseperatorA += (char)hp.newlineseperator[i];
+    for (int i = 0; i < wcslen(hp.lineSeparator); i++)
+      newlineseperatorA += (char)hp.lineSeparator[i];
     StringCharReplacer(buff, newlineseperatorA.c_str(), newlineseperatorA.size(), '\n');
   }
 }
@@ -267,11 +271,20 @@ bool TextHook::waitfornotify(TextBuffer *buff, ThreadParam tp)
       return false;
     translatecache.insert(std::make_pair(hash, translate));
   }
-  if (hp.newlineseperator)
-    strReplace(translate, L"\n", hp.newlineseperator);
+  if (hp.lineSeparator)
+    strReplace(translate, L"\n", hp.lineSeparator);
   translate = adjustSpacesSTD(translate, hp);
-  if (commonsharedmem->keeprawtext)
+  switch (commonsharedmem->displaymode)
+  {
+  case Displaymode::TRANS:
+    break;
+  case Displaymode::ORI_TRANS:
     translate = origin + L" " + translate;
+    break;
+  case Displaymode::TRANS_ORI:
+    translate = translate + L" " + origin;
+    break;
+  }
   solvefont(hp);
   cast_back(hp, buff, translate, false);
   return true;

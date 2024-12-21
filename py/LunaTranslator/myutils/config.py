@@ -1,7 +1,6 @@
 import json
 import os, time, uuid, shutil, sys, platform
 from traceback import print_exc
-from qtsymbols import *
 
 
 def isascii(s: str):
@@ -151,7 +150,6 @@ def getdefaultsavehook(title=None):
         # "leuse": True, 废弃
         "hook": [],
         "inserthooktimeout": 500,
-        "insertpchooks_GdiGdiplusD3dx": False,
         "insertpchooks_string": False,
         "needinserthookcode": [],
         # "allow_tts_auto_names": "",#->v4
@@ -563,11 +561,11 @@ static_data["language_list_translator_inner_english"] = [
 ]
 
 
-def getlanguse():
+def getlanguse() -> str:
     return globalconfig["languageuse2"]
 
 
-def langfile(lang):
+def langfile(lang) -> str:
     return "./files/lang/{}.json".format(lang)
 
 
@@ -584,17 +582,17 @@ def loadlanguage():
         languageshow = {}
 
 
-def _TR(k: str):
+def _TR(k: str) -> str:
     if not k:
         return ""
-    if isascii(k):
-        return k
-    loadlanguage()
     if "_" in k:
         splits = k.split("_")
         return " ".join([_TR(_) for _ in splits])
     if k.startswith("(") and k.endswith(")"):
         return "(" + _TR(k[1:-1]) + ")"
+    if isascii(k):
+        return k
+    loadlanguage()
     __ = languageshow.get(k)
     if __:
         return __
@@ -645,9 +643,6 @@ if mdict_path_dir:
 def autoparsedynamicpath():
     for dic, routine, target in (
         (globalconfig, ("cishu", "mdict", "args"), "paths"),
-        (globalconfig, ("cishu", "edict", "args"), "path"),
-        (globalconfig, ("cishu", "linggesi", "args"), "path"),
-        (globalconfig, ("cishu", "xiaoxueguan", "args"), "path"),
         (globalconfig, ("hirasetting", "mecab", "args"), "path"),
         (globalconfig, ("hirasetting", "mecab", "args"), "path"),
         (globalconfig, ("reader", "voiceroid2", "args"), "path"),
@@ -727,10 +722,6 @@ def saveallconfig(test=False):
         )
 
 
-def is_font_installed(font: str) -> bool:
-    return QFont(font).exactMatch()
-
-
 # font_default_used = {}
 def get_platform():
     if tuple(sys.version_info)[:2] == (3, 4):
@@ -740,42 +731,3 @@ def get_platform():
     elif platform.architecture()[0] == "32bit":
         bit = "32"
     return bit
-
-
-def get_font_default(lang: str, issetting: bool) -> str:
-    # global font_default_used
-    # if lang in font_default_used.keys():
-    #     return font_default_used[lang]
-
-    t = "setting_font_type_default" if issetting else "font_type_default"
-    l = lang if lang in static_data[t].keys() else "default"
-
-    font_default = ""
-
-    if isinstance(static_data[t][l], list):
-        fontlist = static_data[t][l]
-    elif isinstance(static_data[t][l], dict):
-        if get_platform() == "xp":
-            target = "xp"
-        else:
-            target = "normal"
-        fontlist = static_data[t][l].get(target, [])
-    else:
-        fontlist = []
-    for font in fontlist:
-        if is_font_installed(font):
-            font_default = font
-            break
-    if font_default == "":
-        font_default = QFontDatabase.systemFont(
-            QFontDatabase.SystemFont.GeneralFont
-        ).family()
-
-    # font_default_used["lang"] = font_default
-    return font_default
-
-
-def set_font_default(lang: str, fonttype: str) -> None:
-    globalconfig[fonttype] = get_font_default(
-        lang, True if fonttype == "settingfonttype" else False
-    )

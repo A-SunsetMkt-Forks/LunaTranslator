@@ -1,4 +1,4 @@
-#include "BGI.h"
+﻿#include "BGI.h"
 /********************************************************************************************
 BGI hook:
   Usually game folder contains BGI.*. After first run BGI.gdb appears.
@@ -10,59 +10,7 @@ BGI hook:
   it's likely to be different for different calls.
 ********************************************************************************************/
 namespace
-{      // unnamed
-#if 0  // jichi 12/28/2013: dynamic BGI is not used
-static bool FindBGIHook(DWORD fun, DWORD size, DWORD pt, WORD sig)
-{
-  if (!fun) {
-    ConsoleOutput("BGI: cannot find BGI hook");
-    //swprintf(str, L"Can't find BGI hook: %.8X.",fun);
-    //ConsoleOutput(str);
-    return false;
-  }
-  //WCHAR str[0x40];
-  //i=FindCallBoth(fun,size,pt);
-
-  //swprintf(str, L"CALL addr: 0x%.8X",pt+i);
-  //ConsoleOutput(str);
-  for (DWORD i = fun, j = fun; j > i - 0x100; j--)
-    if ((*(WORD *)(pt + j)) == sig) { // Fun entry 1.
-      //swprintf(str, L"Entry 1: 0x%.8X",pt+j);
-      //ConsoleOutput(str);
-      for (DWORD k = i + 0x100; k < i+0x800; k++)
-        if (*(BYTE *)(pt + k) == 0xe8)
-          if (k + 5 + *(DWORD *)(pt + k + 1) == j) { // Find call to fun1.
-            //swprintf(str, L"CALL to entry 1: 0x%.8X",pt+k);
-            //ConsoleOutput(str);
-            for (DWORD l = k; l > k - 0x100;l--)
-              if ((*(WORD *)(pt + l)) == 0xec83) { // Fun entry 2.
-                //swprintf(str, L"Entry 2(final): 0x%.8X",pt+l);
-                //ConsoleOutput(str);
-                HookParam hp;
-                hp.address = (DWORD)pt + l;
-                hp.offset=get_stack(2);
-                hp.split =get_reg(regs::esp);
-                hp.type = CODEC_ANSI_BE|USING_SPLIT;
-                ConsoleOutput("INSERT DynamicBGI");
-                
-                return NewHook(hp, "BGI");
-              }
-          }
-    }
-  ConsoleOutput("DynamicBGI: failed");
-  return false;
-}
-bool InsertBGIDynamicHook(LPVOID addr, DWORD frame, DWORD stack)
-{
-  if (addr != TextOutA && addr != TextOutW)  {
-    //ConsoleOutput("DynamicBGI: failed");
-    return false;
-  }
-
-  DWORD i = *(DWORD *)(stack + 4) - processStartAddress;
-  return FindBGIHook(i, processStopAddress - processStartAddress, processStartAddress, 0xec83);
-}
-#endif // 0
+{ // unnamed
 
   /** jichi 5/12/2014
    *  Sample game:  FORTUNE ARTERIAL, case 2 at 0x41ebd0
@@ -145,8 +93,8 @@ bool InsertBGIDynamicHook(LPVOID addr, DWORD frame, DWORD stack)
           hp.address = SafeFindEnclosingAlignedFunction(i, 0x40);
           if (hp.address)
           {
-            hp.offset = get_stack(3);
-            hp.split = get_reg(regs::esp);
+            hp.offset = stackoffset(3);
+            hp.split = regoffset(esp);
             hp.type = CODEC_ANSI_BE | USING_SPLIT;
             ConsoleOutput("INSERT BGI#1");
 
@@ -163,8 +111,8 @@ bool InsertBGIDynamicHook(LPVOID addr, DWORD frame, DWORD stack)
           hp.address = SafeFindEnclosingAlignedFunction(i, 0x40);
           if (hp.address)
           {
-            hp.offset = get_stack(3);
-            hp.split = get_reg(regs::esp);
+            hp.offset = stackoffset(3);
+            hp.split = regoffset(esp);
             hp.type = CODEC_ANSI_BE | USING_SPLIT;
             ConsoleOutput("INSERT BGI#2");
 
@@ -528,7 +476,7 @@ bool InsertBGIDynamicHook(LPVOID addr, DWORD frame, DWORD stack)
   //   return r;
   // }
   //
-  // static void SpecialHookBGI2(hook_stack* stack,  HookParam *hp, uintptr_t *data, uintptr_t *split, size_t*len)
+  // static void SpecialHookBGI2(hook_context *context,  HookParam *hp, uintptr_t *data, uintptr_t *split, size_t*len)
   //{
   //   LPCSTR text = (LPCSTR)*(DWORD *)(esp_base + hp->offset);
   //   if (text) {
@@ -546,14 +494,14 @@ bool InsertBGIDynamicHook(LPVOID addr, DWORD frame, DWORD stack)
       Type_BGI3
     } type_;
     int textIndex_; // the i-th of argument on the stack holding the text
-    void hookBefore(hook_stack *s, HookParam *hp, TextBuffer *buffer, uintptr_t *role)
+    void hookBefore(hook_context *s, HookParam *hp, TextBuffer *buffer, uintptr_t *role)
     {
       if (type_ == Type_BGI3)
       {
 
         DWORD retaddr = s->stack[0]; // retaddr
         *role = Engine::ScenarioRole;
-        buffer->from_cs((LPCSTR)s->stack[textIndex_]);
+        buffer->from((LPCSTR)s->stack[textIndex_]);
         return;
       }
 
@@ -564,7 +512,7 @@ bool InsertBGIDynamicHook(LPVOID addr, DWORD frame, DWORD stack)
         return;
       // In Type 1, split = arg8
       // In Type 2, there is no arg8. However, arg8 seems to be a good split that can differenciate choice and character name
-      // DWORD split = stack->args[3]; // arg4
+      // DWORD split = context->args[3]; // arg4
       // DWORD split = s->stack[8]; // arg8
       // auto sig = Engine::hashThreadSignature(s->stack[0], split);
       // enum { role = Engine::UnknownRole };
@@ -619,7 +567,7 @@ bool InsertBGIDynamicHook(LPVOID addr, DWORD frame, DWORD stack)
         break;
       }
 
-      buffer->from_cs((LPCSTR)s->stack[textIndex_]);
+      buffer->from((LPCSTR)s->stack[textIndex_]);
     }
 
   }
@@ -1095,55 +1043,6 @@ bool InsertBGIDynamicHook(LPVOID addr, DWORD frame, DWORD stack)
     }
     return 0; // failed
   }
-  ULONG search_bgi3(ULONG startAddress, ULONG stopAddress)
-  {
-    // 黄昏のフォルクローレ
-    /* .text:00C3A700 push    ebp
-     .text : 00C3A701 mov     ebp, esp
-     .text : 00C3A703 push[ebp + arg_30]
-     .text : 00C3A706 mov     edx, [ebp + arg_4]
-     .text : 00C3A709 push[ebp + arg_2C]
-     .text : 00C3A70C mov     ecx, [ebp + arg_0]
-     .text : 00C3A70F push[ebp + arg_28]
-     .text : 00C3A712 push[ebp + arg_24]
-     .text : 00C3A715 push[ebp + arg_20]
-     .text : 00C3A718 push[ebp + arg_1C]
-     .text : 00C3A71B push[ebp + arg_18]
-     .text : 00C3A71E push[ebp + arg_14]
-     .text : 00C3A721 push[ebp + arg_10]
-     .text : 00C3A724 push[ebp + arg_C]
-     .text : 00C3A727 push[ebp + arg_8]
-     .text : 00C3A72A call    loc_C3A740
-     int __stdcall sub_C3A700(
-   int a1,
-   int a2,
-   int a3,
-   int a4,
-   int a5,
-   int a6,
-   int a7,
-   int a8,
-   int a9,
-   int a10,
-   int a11,
-   int a12,
-   int a13)
-
-     */
-    const uint8_t bytes[] = {
-        0x55,
-        0x8b, 0xec,
-        0xff, 0x75, 0x38,
-        0x8b, 0x55, 0x0c,
-        0xff, 0x75, 0x34,
-        0x8b, 0x4d, 0x08,
-        0xff, 0x75, 0x30};
-    ULONG range = min(ULONG(stopAddress - startAddress), ULONG(0x00300000));
-    ULONG addr = MemDbg::findBytes(bytes, sizeof(bytes), startAddress, startAddress + range);
-    if (addr == 0)
-      return 0;
-    return addr;
-  }
   bool search_tayutama(DWORD *funaddr, DWORD *addr)
   {
     const BYTE bytes[] = {
@@ -1190,18 +1089,8 @@ bool InsertBGIDynamicHook(LPVOID addr, DWORD frame, DWORD stack)
     */
     ULONG addr, funaddr;
     HookParam hp;
-    hp.hook_font = F_TextOutA | F_TextOutW;
-    if (addr = search_bgi3(processStartAddress, processStopAddress))
-    {
-      // 有乱码，无法处理。
-      Private::textIndex_ = 3;
-      hp.offset = get_stack(Private::textIndex_);
-      Private::type_ = Private::Type_BGI3;
-      hp.hook_font |= F_GetTextExtentPoint32W;
-      if (addr - processStartAddress == 0x3B860) //[220729][1171051][きゃべつそふと] ジュエリー・ハーツ・アカデミア -We will wing wonder world-，无法处理的乱码，不知道怎么回事。
-        addr = 0;
-    }
-    else if (search_tayutama(&funaddr, &addr))
+    hp.embed_hook_font = F_TextOutA | F_TextOutW;
+    if (search_tayutama(&funaddr, &addr))
     {
 
       switch (funaddr - addr)
@@ -1250,7 +1139,7 @@ bool InsertBGIDynamicHook(LPVOID addr, DWORD frame, DWORD stack)
     if (addr == 0)
       return false;
     hp.address = addr;
-    hp.offset = get_stack(Private::textIndex_);
+    hp.offset = stackoffset(Private::textIndex_);
     // jichi 5/12/2014: Using split could distinguish name and choices. But the signature might become unstable
     hp.type = USING_STRING | USING_SPLIT | EMBED_ABLE | EMBED_DYNA_SJIS | EMBED_AFTER_NEW | NO_CONTEXT;
 
@@ -1258,136 +1147,18 @@ bool InsertBGIDynamicHook(LPVOID addr, DWORD frame, DWORD stack)
     hp.filter_fun = [](TextBuffer *buffer, HookParam *hp)
     {
       // It could be either <R..> or <r..>
-      static const std::regex rx("<r.+?>(.+?)</r>", std::regex_constants::icase);
       std::string result = buffer->strA();
-      result = std::regex_replace(result, rx, "$1");
+      result = std::regex_replace(result, std::regex("<r.+?>(.+?)</r>", std::regex_constants::icase), "$1");
       buffer->from(result);
     };
 
-    hp.split = get_stack(8); // pseudo arg8
+    hp.split = stackoffset(8); // pseudo arg8
 
     // GROWL_DWORD2(hp.address, processStartAddress);
 
     return NewHook(hp, "EmbedBGI");
   }
 
-  bool InsertBGI3Hook()
-  {
-    /*
-     * Sample games:
-     * https://vndb.org/v28283
-     * https://vndb.org/v30456
-     * https://vndb.org/v33996
-     * https://vndb.org/v34532
-     * https://vndb.org/v36131
-     */
-    bool found = false;
-    const BYTE pattern[] = {
-        0x55,                              // 55               push ebp
-        0x8b, 0xec,                        // 8BEC             mov ebp,esp
-        0x83, 0xe4, 0xf8,                  // 83E4 F8          and esp,FFFFFFF8
-        0x81, 0xec, 0x84, 0x00, 0x00, 0x00 // 81EC 84000000    sub esp,0x84
-    };
-
-    for (auto addr : Util::SearchMemory(pattern, sizeof(pattern), PAGE_EXECUTE, processStartAddress, processStopAddress))
-    {
-      HookParam hp;
-      hp.address = addr;
-      hp.offset = get_stack(2);
-      hp.split = get_stack(1);
-      hp.type = CODEC_UTF16 | USING_SPLIT;
-      ConsoleOutput("INSERT BGI3");
-      found |= NewHook(hp, "BGI3");
-    }
-    if (!found)
-      ConsoleOutput("BGI3: pattern not found");
-    return found;
-  }
-
-#if 0
-/**
- *  jichi 1/31/2014: Add a new BGI hook
- *  See: http://www.hongfire.com/forum/showthread.php/36807-AGTH-text-extraction-tool-for-games-translation/page702
- *  See: http://www.hongfire.com/forum/showthread.php/36807-AGTH-text-extraction-tool-for-games-translation/page716
- *
- *  Issue: This hook has floating split char
- *
- *  [ぷちけろ] コトバの消えた日 �忁�で裸にする純�調教～体験版
- *  /HS-1C:-4@68E56:BGI.exe
- *  - addr: 429654 (0x68e56)
- *  - module: 3927275266 (0xea157702)
- *  - off: 4294967264 = 0xffffffe0 = -0x20
- *  - split: 4294967288 = 0xfffffff8 = -0x8
- *  - type: 81 = 0x51
- *
- *  00e88e3d     cc             int3
- *  00e88e3e     cc             int3
- *  00e88e3f     cc             int3
- *  00e88e40  /. 55             push ebp
- *  00e88e41  |. 8bec           mov ebp,esp
- *  00e88e43  |. 56             push esi
- *  00e88e44  |. 57             push edi
- *  00e88e45  |. 8b7d 08        mov edi,dword ptr ss:[ebp+0x8]
- *  00e88e48  |. 57             push edi
- *  00e88e49  |. e8 c28a0100    call bgi.00ea1910
- *  00e88e4e  |. 57             push edi                                 ; |arg1
- *  00e88e4f  |. 8bf0           mov esi,eax                              ; |
- *  00e88e51  |. e8 ba8a0100    call bgi.00ea1910                        ; \bgi.00ea1910
- *  00e88e56  |. 83c4 08        add esp,0x8 ; jichi: hook here
- *  00e88e59  |. 2bc6           sub eax,esi
- *  00e88e5b  |. eb 03          jmp short bgi.00e88e60
- *  00e88e5d  |  8d49 00        lea ecx,dword ptr ds:[ecx]
- *  00e88e60  |> 8a0e           /mov cl,byte ptr ds:[esi]
- *  00e88e62  |. 880c30         |mov byte ptr ds:[eax+esi],cl
- *  00e88e65  |. 46             |inc esi
- *  00e88e66  |. 84c9           |test cl,cl
- *  00e88e68  |.^75 f6          \jnz short bgi.00e88e60
- *  00e88e6a  |. 5f             pop edi
- *  00e88e6b  |. 33c0           xor eax,eax
- *  00e88e6d  |. 5e             pop esi
- *  00e88e6e  |. 5d             pop ebp
- *  00e88e6f  \. c3             retn
- */
-bool InsertBGI3Hook()
-{
-  const BYTE bytes[] = {
-    0x83,0xc4, 0x08,// 00e88e56  |. 83c4 08        add esp,0x8 ; hook here
-    0x2b,0xc6,      // 00e88e59  |. 2bc6           sub eax,esi
-    0xeb, 0x03,     // 00e88e5b  |. eb 03          jmp short bgi.00e88e60
-    0x8d,0x49, 0x00,// 00e88e5d  |  8d49 00        lea ecx,dword ptr ds:[ecx]
-    0x8a,0x0e,      // 00e88e60  |> 8a0e           /mov cl,byte ptr ds:[esi]
-    0x88,0x0c,0x30, // 00e88e62  |. 880c30         |mov byte ptr ds:[eax+esi],cl
-    0x46,           // 00e88e65  |. 46             |inc esi
-    0x84,0xc9,      // 00e88e66  |. 84c9           |test cl,cl
-    0x75, 0xf6      // 00e88e68  |.^75 f6          \jnz short bgi.00e88e60
-    //0x5f,           // 00e88e6a  |. 5f             pop edi
-    //0x33,0xc0,      // 00e88e6b  |. 33c0           xor eax,eax
-    //0x5e,           // 00e88e6d  |. 5e             pop esi
-    //0x5d,           // 00e88e6e  |. 5d             pop ebp
-    //0xc3            // 00e88e6f  \. c3             retn
-  };
-  //enum { addr_offset = 0 };
-  ULONG range = min(processStopAddress - processStartAddress, MAX_REL_ADDR);
-  ULONG addr = MemDbg::findBytes(bytes, sizeof(bytes), processStartAddress, processStartAddress + range);
-  //reladdr = 0x68e56;
-  if (!addr) {
-    ConsoleOutput("BGI3: pattern not found");
-    return false;
-  }
-
-  HookParam hp;
-  hp.type = USING_STRING|USING_SPLIT;
-  hp.offset=get_reg(regs::esi);
-  hp.split = get_reg(regs::eax);
-  hp.address = addr;
-
-  //GROWL_DWORD2(hp.address, processStartAddress);
-
-  ConsoleOutput("INSERT BGI3");
-  
-  return NewHook(hp, "BGI3");
-}
-#endif // 0
 } // unnamed
 
 // jichi 5/12/2014: BGI1 and BGI2 game can co-exist, such as 世界と世界の真ん中で
@@ -1398,60 +1169,14 @@ bool InsertBGI3Hook()
 
 void BGI7Filter(TextBuffer *buffer, HookParam *)
 {
-  auto text = reinterpret_cast<LPWSTR>(buffer->buff);
   CharFilter(buffer, L'\x0001');
   CharFilter(buffer, L'\x0002');
   CharFilter(buffer, L'\x0003');
   CharFilter(buffer, L'\x0004');
   CharFilter(buffer, L'\x0005');
   CharFilter(buffer, L'\x000A');
-  if (text[0] == L'\u3000')
-  {
-    buffer->size -= 2;
-    ::memmove(text, text + 1, buffer->size);
-  }
-  CharReplacer(buffer, L'\u3000', L' '); // IDSP
-
-  if (cpp_wcsnstr(text, L"<", buffer->size / sizeof(wchar_t)))
-  {
-    StringFilterBetween(buffer, L"<", 1, L">", 1);
-  }
-}
-
-bool InsertBGI7Hook()
-{
-
-  /*
-   * Sample games:
-   * https://vndb.org/v26664
-   * https://vndb.org/v44105
-   */
-  bool found = false;
-  const BYTE pattern[] = {
-      0x55,       // 55               push ebp         << hook here
-      0x8b, 0xec, // 8BEC             mov ebp,esp
-      0x53,       // 53               push ebx
-      0x56,       // 56               push esi
-      0x57,       // 57               push edi
-      0x33, 0xFF, // 33 FF            xor edi,edi
-      0xE8, XX4,  // E8 23FDFFFF      call saclet.exe+A0990
-      0x8B, 0xF0  // 8B F0            mov esi,eax
-  };
-
-  for (auto addr : Util::SearchMemory(pattern, sizeof(pattern), PAGE_EXECUTE, processStartAddress, processStopAddress))
-  {
-    HookParam hp;
-    hp.address = addr;
-    hp.offset = get_reg(regs::eax);
-    hp.split = get_reg(regs::esp);
-    hp.type = CODEC_UTF16 | USING_STRING | USING_SPLIT | KNOWN_UNSTABLE;
-    hp.filter_fun = BGI7Filter;
-    ConsoleOutput("INSERT BGI4");
-    found |= NewHook(hp, "BGI4");
-  }
-  if (!found)
-    ConsoleOutput("BGI4: pattern not found");
-  return found;
+  CharFilter(buffer, L'▼');
+  StringFilterBetween(buffer, L"<", 1, L">", 1);
 }
 
 void BGI56Filter(TextBuffer *buffer, HookParam *)
@@ -1465,76 +1190,7 @@ void BGI56Filter(TextBuffer *buffer, HookParam *)
   }
 }
 
-bool InsertBGI5Hook()
-{
-
-  /*
-   * Sample games:
-   * https://vndb.org/v473
-   */
-  const BYTE bytes[] = {
-      0x90,                  // nop
-      0x81, 0xEC, XX4,       // sub esp,00000920         << hook here
-      0x8B, 0x84, 0x24, XX4, // mov eax,[esp+00000944]
-      0x55,                  // push ebp
-      0x8D, 0x8C, 0x24, XX4  // lea ecx,[esp+000000F4]
-  };
-
-  ULONG range = min(processStopAddress - processStartAddress, MAX_REL_ADDR);
-  ULONG addr = MemDbg::findBytes(bytes, sizeof(bytes), processStartAddress, processStartAddress + range);
-  if (!addr)
-    return false;
-
-  HookParam hp;
-  hp.address = addr + 1;
-  hp.offset = get_reg(regs::ecx);
-  hp.padding = 1;
-  hp.type = USING_STRING;
-  hp.filter_fun = BGI56Filter;
-  ConsoleOutput("INSERT BGI5");
-
-  return NewHook(hp, "BGI5");
-}
-
-bool InsertBGI6Hook()
-{
-
-  /*
-   * Sample games:
-   * https://vndb.org/r96578
-   */
-  const BYTE bytes[] = {
-      0x90,                                     // nop
-      0x6A, 0xFF,                               // push -01            << hook here
-      0x68, XX4,                                // push BGI.exe+87AF8
-      0x64, 0xA1, 0x00, 0x00, 0x00, 0x00,       // mov eax,fs:[00000000]
-      0x50,                                     // push eax
-      0x64, 0x89, 0x25, 0x00, 0x00, 0x00, 0x00, // mov fs:[00000000],esp
-      0x81, 0xEC, XX4,                          // sub esp,000009B4
-      0x8B, 0x84, 0x24, 0xE4, 0x09, 0x00, 0x00  // mov eax,[esp+000009E4]
-  };
-
-  ULONG range = min(processStopAddress - processStartAddress, MAX_REL_ADDR);
-  ULONG addr = MemDbg::findBytes(bytes, sizeof(bytes), processStartAddress, processStartAddress + range);
-  if (!addr)
-    return false;
-
-  HookParam hp;
-  hp.address = addr + 1;
-  hp.offset = get_reg(regs::ecx);
-  hp.padding = 1;
-  hp.type = USING_STRING;
-  hp.filter_fun = BGI56Filter;
-  ConsoleOutput("INSERT BGI6");
-
-  return NewHook(hp, "BGI6");
-}
-bool InsertBGIHook()
-{
-  return InsertBGI2Hook() || InsertBGI3Hook() || (PcHooks::hookOtherPcFunctions(), InsertBGI1Hook());
-}
-
-bool InsertBGI4Hook()
+bool InsertBGI4Hook_1()
 {
   /*
     int __cdecl sub_4A3AD0(LPSTR lpMultiByteStr, LPCWCH lpWideCharStr, int a3)
@@ -1570,7 +1226,7 @@ bool InsertBGI4Hook()
 }*/
   const BYTE bytes[] = {
       0xBE, 0xE9, 0xFD, 0x00, 0x00, // cp=65001
-      XX2,
+      0xeb, XX,
       0xBE, 0xA4, 0x03, 0x00, 0x00 // cp=932
   };
   auto addr = MemDbg::findBytes(bytes, sizeof(bytes), processStartAddress, processStopAddress);
@@ -1581,26 +1237,59 @@ bool InsertBGI4Hook()
     return false;
   HookParam hp;
   hp.address = addr;
-  // hp.offset=get_reg(regs::eax);
-  // hp.split = get_reg(regs::esp);
-  hp.text_fun = [](hook_stack *stack, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
-  {
-    *split = stack->stack[6]; // 不一定对
-    auto sp = *split;
-    if ((sp == 0) || (sp == 1) || ((sp & 0xFFF) == 0x790))
-    {
-      // [240726][1282405][HOOKSOFT] シークレットラブ（仮）
-      // 这作case 1仅当快进时才有文本,其他的在XXXXX790上
-      buffer->from_cs((wchar_t *)stack->stack[2]);
-    }
-  };
-  hp.type = CODEC_UTF16 | USING_STRING | NO_CONTEXT | EMBED_ABLE | EMBED_AFTER_OVERWRITE;
-  hp.hook_font = F_TextOutW | F_GetTextExtentPoint32W;
+  hp.type = CODEC_UTF16 | USING_STRING;
   hp.filter_fun = BGI7Filter;
-  hp.offset = get_stack(2);
+  hp.offset = GETARG2;
   ConsoleOutput("BGI4");
 
   return NewHook(hp, "BGI4");
+}
+
+bool InsertBGI4Hook_2()
+{
+  /*
+    if ( *(unsigned __int8 *)v1 == 239 )
+    {
+      v12 = *((unsigned __int8 *)v1 + 1) | 0xEF00;
+      goto LABEL_16;
+    }
+    if ( *(unsigned __int8 *)v1 == 255 )
+    {
+      v12 = *((unsigned __int8 *)v1 + 1) | 0xF000;
+.text:004863E0                 movzx   eax, byte ptr [ecx]
+.text:004863E3                 or      eax, 0F000h
+.text:004863E8                 jmp     short loc_4863F2
+.text:004863EA ; ---------------------------------------------------------------------------
+.text:004863EA
+.text:004863EA loc_4863EA:                             ; CODE XREF: sub_486310+BB↑j
+.text:004863EA                 movzx   eax, byte ptr [ecx]
+.text:004863ED                 or      eax, 0EF00h*/
+  const BYTE bytes[] = {
+      0x0F, 0xB6, 0x01,
+      0x0D, 0x00, 0xF0, 0x00, 0x00,
+      0xeb, XX,
+      0x0F, 0xB6, 0x01,
+      0x0D, 0x00, 0xEF, 0x00, 0x00};
+  auto addr = MemDbg::findBytes(bytes, sizeof(bytes), processStartAddress, processStopAddress);
+  if (!addr)
+    return false;
+  addr = MemDbg::findEnclosingAlignedFunction(addr);
+  if (!addr)
+    return false;
+  auto addrs = findxref_reverse_checkcallop(addr, processStartAddress, processStopAddress, 0xe8);
+  if (1 != addrs.size())
+    return false;
+  HookParam hp;
+  hp.address = addrs[0] + 5;
+  hp.type = CODEC_UTF16 | USING_STRING | EMBED_ABLE | EMBED_AFTER_NEW;
+  hp.embed_hook_font = F_TextOutW | F_GetTextExtentPoint32W;
+  hp.filter_fun = BGI7Filter;
+  hp.offset = regoffset(eax);
+  return NewHook(hp, "BGI");
+}
+bool InsertBGI4Hook()
+{
+  return InsertBGI4Hook_2() || InsertBGI4Hook_1();
 }
 namespace
 {
@@ -1608,6 +1297,8 @@ namespace
   {
     // 紅月－くれないつき－
     // あの街の恋の詩
+    // H2O -FOOTPRINTS IN THE SAND-
+
     auto addr = findiatcallormov((DWORD)GetGlyphOutlineA, processStartAddress, processStartAddress, processStopAddress);
     if (addr == 0) // 銀行淫～堕ちゆく女達～ //mov     ebp, ds:GetGlyphOutlineA
       addr = findiatcallormov((DWORD)GetGlyphOutlineA, processStartAddress, processStartAddress, processStopAddress, false, XX);
@@ -1628,75 +1319,16 @@ namespace
       return false;
     HookParam hp;
     hp.address = funcstart;
-    hp.offset = get_stack(2);
-    hp.split = get_stack(1);
+    hp.offset = stackoffset(2);
+    hp.split = stackoffset(1);
     hp.type = CODEC_ANSI_BE | USING_SPLIT;
 
     return NewHook(hp, "BGI5");
   }
 }
-namespace
-{
-  //[220729][1171051][きゃべつそふと] ジュエリー・ハーツ・アカデミア -We will wing wonder world-
-  // int __fastcall sub_438E90(int a1, int *a2, int a3, _DWORD *a4, int a5)
-  bool hook7()
-  {
-    BYTE sig[] = {
-        0x55, 0x8b, 0xec,
-        0x83, 0xe4, 0xf0,
-        0x83, 0xec, XX,
-        0x56,
-        0x57,
-        0x8b, XX, 0x08,
-        0x8b, 0xf2,
-        0x8b, 0xd1,
-        0x81, 0xcf, 0x00, 0x00, 0x00, 0x80,
-        0x8b, 0xcf,
-        0x89, 0x54, 0x24, 0x0c,
-        0xe8, XX4,
-        0x85, 0xc0,
-        0x0f, 0x84, XX4,
-        0x8b, 0x45, 0x08
-
-    };
-    auto addr = MemDbg::findBytes(sig, sizeof(sig), processStartAddress, processStopAddress);
-    if (!addr)
-      return false;
-    HookParam hp;
-    hp.address = addr;
-    // hp.offset=get_stack(1);
-    // hp.split=get_stack(3);
-    hp.type = USING_CHAR | CODEC_UTF16 | NO_CONTEXT; //|USING_SPLIT;
-    hp.text_fun = [](hook_stack *stack, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
-    {
-      switch (stack->stack[3])
-      {
-      case 0xfefefe:
-        hp->user_value = stack->retaddr;
-        buffer->from_t((wchar_t)stack->stack[1]);
-        *split = 1;
-        break;
-      case 0xffffff: // 名字&历史+零散的文字，由于no_context他们被合并，但是和名字和文本是同一个调用地址
-
-        if (hp->user_value == stack->retaddr)
-        {
-          buffer->from_t((wchar_t)stack->stack[1]);
-          *split = 2;
-        }
-        break;
-      case 0xfcfcc0: // 历史
-      default:;
-      }
-    };
-    return NewHook(hp, "bgi7");
-  }
-}
 bool BGI::attach_function()
 {
-  bool b1 = InsertBGIHook();
-  bool b2 = InsertBGI4Hook();
-  bool ok = b1 || b2 || veryold();
-  ok |= hook7();
-  ok = InsertBGI7Hook() || InsertBGI5Hook() || InsertBGI6Hook() || ok;
-  return ok;
+  if (InsertBGI4Hook())
+    return true;
+  return InsertBGI2Hook() || (PcHooks::hookOtherPcFunctions(), InsertBGI1Hook()) || veryold();
 }
